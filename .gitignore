@@ -1,0 +1,8 @@
+﻿################################################################################
+# This .gitignore file was automatically created by Microsoft(R) Visual Studio.
+################################################################################
+
+/client/x64/Debug
+/server/x64/Debug
+/.vs/win-remote-driver-installer/v17
+/x64/Debug
