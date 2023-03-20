@@ -1,77 +1,4 @@
-﻿#define _WINSOCKAPI_
-
-#include <stdio.h>
-#include <stdlib.h>
-
-#include <iostream>
-#include <string.h>
-#include <memory.h>
-
-#include <windows.h>
-#include <Ws2tcpip.h>
-#include <shlwapi.h>
-
-#pragma comment (lib, "ws2_32.lib")
-#pragma comment (lib, "shlwapi.lib")
-
-bool createDirectories(wchar_t* path)
-{
-	wchar_t* buffer = new wchar_t[MAX_PATH];
-	buffer[0] = '\0';
-
-	wchar_t* remainPath = NULL;
-	wchar_t* splitedPath = wcstok_s(path, L"\\/", &remainPath);
-
-	while (splitedPath != NULL)
-	{
-		size_t directoryNameLength = wcslen(splitedPath);
-
-		if (directoryNameLength < 1)
-		{
-			delete[] buffer;
-
-			return false;
-		}
-
-		wcscat_s(buffer, MAX_PATH, splitedPath);
-		wcscat_s(buffer, MAX_PATH, L"\\");
-
-		if (!CreateDirectoryW(buffer, NULL))
-		{
-			if (GetLastError() == ERROR_PATH_NOT_FOUND)
-			{
-				delete[] buffer;
-
-				return false;
-			}
-		}
-
-		splitedPath = wcstok_s(NULL, L"\\/", &remainPath);
-	}
-
-	delete[] buffer;
-
-	return true;
-}
-
-int recvBytes(SOCKET socket, char* buffer, int length)
-{
-	int offset = 0;
-
-	while (offset < length)
-	{
-		int ret = recv(socket, buffer + offset, length - offset, 0);
-
-		if (ret <= 0)
-		{
-			return SOCKET_ERROR;
-		}
-
-		offset += ret;
-	}
-
-	return length;
-}
+﻿#include <wrdi.h>
 
 int runService(IN_ADDR* hostAddress, int port, wchar_t* workingDirectory)
 {
@@ -79,13 +6,13 @@ int runService(IN_ADDR* hostAddress, int port, wchar_t* workingDirectory)
 
 	if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0)
 	{
-		printf("Error: WSAStartup failed.\r\n");
+		printf("Error: Failure WSAStartup.\r\n");
 
 		return 1;
 	}
 
 	SOCKET serverSocket = socket(PF_INET, SOCK_STREAM, 0);
-	SOCKADDR_IN socketAddress;
+	SOCKADDR_IN socketAddress = { 0 };
 
 	memcpy(&socketAddress.sin_addr, hostAddress, sizeof(IN_ADDR));
 	socketAddress.sin_family = AF_INET;
@@ -93,14 +20,14 @@ int runService(IN_ADDR* hostAddress, int port, wchar_t* workingDirectory)
 
 	if (bind(serverSocket, (SOCKADDR*)&socketAddress, sizeof(SOCKADDR_IN)) == SOCKET_ERROR)
 	{
-		printf("Error: Socket bind failed.\r\n");
+		printf("Error: Failure socket bind.\r\n");
 
 		return 1;
 	}
 
 	if (listen(serverSocket, SOMAXCONN) == SOCKET_ERROR)
 	{
-		printf("Error: Socket listen failed.\r\n");
+		printf("Error: Failure socket listen.\r\n");
 
 		return 1;
 	}
@@ -111,7 +38,7 @@ int runService(IN_ADDR* hostAddress, int port, wchar_t* workingDirectory)
 	{
 		int clientAddressLength = sizeof(SOCKADDR_IN);
 		char clientAddressString[INET_ADDRSTRLEN];
-		SOCKADDR_IN clientAddress;
+		SOCKADDR_IN clientAddress = { 0 };
 
 		printf("Info: Waiting for client..\r\n");
 
@@ -119,7 +46,7 @@ int runService(IN_ADDR* hostAddress, int port, wchar_t* workingDirectory)
 
 		if (clientSocket == SOCKET_ERROR)
 		{
-			printf("Error: Socket accept failed.\r\n");
+			printf("Error: Failure socket accept.\r\n");
 
 			return 1;
 		}
@@ -160,7 +87,7 @@ int runService(IN_ADDR* hostAddress, int port, wchar_t* workingDirectory)
 				break;
 			}
 
-			wchar_t fileName[MAX_PATH];
+			wchar_t fileName[MAX_PATH] = { 0 };
 			char* fileNameBuffer = (char*)fileName;
 
 			if (recvBytes(clientSocket, fileNameBuffer, fileNameSize) == SOCKET_ERROR)
@@ -190,12 +117,12 @@ int runService(IN_ADDR* hostAddress, int port, wchar_t* workingDirectory)
 				break;
 			}
 
-			char* fileData = new char[fileSize];
+			char* fileData = malloc(sizeof(char) * fileSize);
 
 			if (recvBytes(clientSocket, fileData, fileSize) == SOCKET_ERROR)
 			{
 				printf("Error: Failure receive file data.\r\n");
-				delete[] fileData;
+				free(fileData);
 
 				break;
 			}
@@ -206,18 +133,18 @@ int runService(IN_ADDR* hostAddress, int port, wchar_t* workingDirectory)
 			if (PathCombineW(fullPath, workingDirectory, fileNameUnicode) == NULL)
 			{
 				printf("Error: Failure path combine.\r\n");
-				delete[] fileData;
+				free(fileData);
 
 				break;
 			}
 
 			wchar_t directoryPath[MAX_PATH];
-			wcscpy_s(directoryPath, fullPath);
+			wcscpy_s(directoryPath, MAX_PATH, fullPath);
 
 			if (!PathRemoveFileSpecW(directoryPath))
 			{
 				printf("Error: Failure remove file name in full path.\r\n");
-				delete[] fileData;
+				free(fileData);
 
 				break;
 			}
@@ -225,17 +152,23 @@ int runService(IN_ADDR* hostAddress, int port, wchar_t* workingDirectory)
 			if (!createDirectories(directoryPath))
 			{
 				printf("Error: Failure create sub directories.\r\n");
-				delete[] fileData;
+				free(fileData);
 
 				break;
 			}
 
-			HANDLE fileHandle = CreateFileW(fullPath, GENERIC_WRITE, 0, NULL, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, NULL);
+			HANDLE fileHandle = CreateFileW(fullPath, 
+											GENERIC_WRITE, 
+											0, 
+											NULL, 
+											CREATE_NEW,
+											FILE_ATTRIBUTE_NORMAL,
+											NULL);
 
 			if (fileHandle == INVALID_HANDLE_VALUE)
 			{
 				printf("Error: Failure open file write handle.\r\n");
-				delete[] fileData;
+				free(fileData);
 
 				break;
 			}
@@ -245,7 +178,7 @@ int runService(IN_ADDR* hostAddress, int port, wchar_t* workingDirectory)
 			if (!WriteFile(fileHandle, fileData, fileSize, &writtenBytes, NULL))
 			{
 				printf("Error: Failure write file.\r\n");
-				delete[] fileData;
+				free(fileData);
 
 				break;
 			}
@@ -253,7 +186,7 @@ int runService(IN_ADDR* hostAddress, int port, wchar_t* workingDirectory)
 			if (writtenBytes != fileSize)
 			{
 				printf("Error: Failure write all data to file.\r\n");
-				delete[] fileData;
+				free(fileData);
 
 				break;
 			}
@@ -261,7 +194,7 @@ int runService(IN_ADDR* hostAddress, int port, wchar_t* workingDirectory)
 			if (writtenBytes != fileSize)
 			{
 				printf("Error: Failure write all data to file.\r\n");
-				delete[] fileData;
+				free(fileData);
 
 				break;
 			}
@@ -269,23 +202,23 @@ int runService(IN_ADDR* hostAddress, int port, wchar_t* workingDirectory)
 			if (!CloseHandle(fileHandle))
 			{
 				printf("Error: Failure close file handle.\r\n");
-				delete[] fileData;
+				free(fileData);
 
 				break;
 			}
 
-			delete[] fileData;
+			free(fileData);
 		}
 	}
 
 	if (closesocket(serverSocket) == SOCKET_ERROR)
 	{
-		printf("Error: Socket close failed.\r\n");
+		printf("Error: Failure socket close.\r\n");
 	}
 
 	if (WSACleanup() != 0)
 	{
-		printf("Error: WSACleanup failed.\r\n");
+		printf("Error: Failure WSACleanup.\r\n");
 	}
 
 	return 0;
@@ -296,12 +229,12 @@ int wmain(int argc, wchar_t** argv)
 {
 	if (argc != 4)
 	{
-		printf("Usage: server.exe <Host> <Port> <Working Directory>\r\n");
+		printf("Usage: wrdi-server.exe <Host> <Port> <Working Directory>\r\n");
 		return -1;
 	}
 
 	wchar_t* host = argv[1];
-	IN_ADDR hostAddress;
+	IN_ADDR hostAddress = { 0 };
 
 	if (InetPtonW(AF_INET, host, &hostAddress) <= 0)
 	{
