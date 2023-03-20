@@ -1,15 +1,25 @@
 ﻿#include <wrdi.h>
 
+char fileBuffer[MAX_FILE_SIZE];
+
 int wmain(int argc, wchar_t** argv)
 {
+	if (sizeof(wchar_t) != 2)
+	{
+		printf("Error: Not supported in system that wide character is not 2 bytes.\r\n");
+
+		return -1;
+	}
+
 	if (argc != 5)
 	{
 		printf("Usage: wrdi-client.exe <Server> <Port> <Upload Directory or File> <Install File>\r\n");
+
 		return -1;
 	}
 
 	wchar_t* server = argv[1];
-	IN_ADDR serverAddress = { 0 };
+	IN_ADDR serverAddress;
 
 	if (InetPtonW(AF_INET, server, &serverAddress) <= 0)
 	{
@@ -32,6 +42,7 @@ int wmain(int argc, wchar_t** argv)
 	}
 
 	wchar_t* uploadTarget = argv[3];
+	removeLastPathSeparator(uploadTarget, MAX_PATH);
 	DWORD uploadTargetAttributes = GetFileAttributesW(uploadTarget);
 
 	if (uploadTargetAttributes == INVALID_FILE_ATTRIBUTES)
@@ -42,6 +53,7 @@ int wmain(int argc, wchar_t** argv)
 	}
 
 	wchar_t* installFile = argv[4];
+	removeLastPathSeparator(installFile, MAX_PATH);
 	DWORD installFileAttributes = GetFileAttributesW(installFile);
 
 	if (installFileAttributes == INVALID_FILE_ATTRIBUTES)
@@ -134,26 +146,25 @@ int wmain(int argc, wchar_t** argv)
 		return 1;
 	}
 
+	char installationMode = INSTALLATION_MODE_DEBUG;
+
 	if (_wcsicmp(installFileExtension, L".inf") == 0)
 	{
-
+		installationMode = INSTALLATION_MODE_INF;
 	}
 	else if (_wcsicmp(installFileExtension, L".sys") == 0)
 	{
-
+		installationMode = INSTALLATION_MODE_SYS;
 	}
-	else if (_wcsicmp(installFileExtension, L".sys") == 0)
-	{
 
-	}
+	printf("Info: Installation mode is %S\r\n", getInstallationModeString(installationMode));
 
 	printf("Info: Prepare upload targets..\r\n");
 
-	char fileBuffer[MAX_FILE_SIZE] = { 0 };
 	wchar_t* directoryName = PathFindFileNameW(uploadTargetFullPath);
 
 	wchar_t* uploadFiles[MAX_FILE_ENTRY_COUNT];
-	int uploadFileCount = 0;
+	size_t uploadFileCount = 0;
 
 	if (uploadTargetAttributes & FILE_ATTRIBUTE_DIRECTORY)
 	{
@@ -174,8 +185,21 @@ int wmain(int argc, wchar_t** argv)
 		uploadFileCount = 1;
 	}
 
-	printf("Info: Uploading %d files..\r\n", uploadFileCount);
-	bool succeedUpload = true;
+	printf("Info: Send prepare packet.\r\n");
+
+	PreparePacket preparePacket = {
+		.fileCount = (uint32_t)uploadFileCount,
+		.installationMode = installationMode
+	};
+
+	if (sendBytes(clientSocket, (char*)&preparePacket, sizeof(PreparePacket)) == SOCKET_ERROR)
+	{
+		printf("Error: Failure send prepare packet.\r\n");
+
+		return 1;
+	}
+
+	printf("Info: Uploading %zu files..\r\n", uploadFileCount);
 
 	for (int i = 0; i < uploadFileCount; i++)
 	{
@@ -183,13 +207,16 @@ int wmain(int argc, wchar_t** argv)
 
 		if (filePath != NULL)
 		{
-			wchar_t localPath[MAX_PATH];
+			wchar_t uploadFilePath[MAX_PATH];
+			int uploadFilePathLength;
 
-			wcscpy_s(localPath, MAX_PATH, directoryName);
-			wcscat_s(localPath, MAX_PATH, L"\\\0");
-			wcscat_s(localPath, MAX_PATH, filePath + uploadTargetFullPathLength + 1);
+			wcscpy_s(uploadFilePath, MAX_PATH, directoryName);
+			wcscat_s(uploadFilePath, MAX_PATH, L"\\\0");
+			wcscat_s(uploadFilePath, MAX_PATH, filePath + uploadTargetFullPathLength + 1);
 
-			printf("Info: Uploading '%S' file..\r\n", localPath);
+			uploadFilePathLength = (int) wcsnlen_s(uploadFilePath, MAX_PATH);
+
+			printf("Info: Uploading '%S' file..\r\n", uploadFilePath);
 
 			HANDLE fileHandle = CreateFileW(filePath,
 											GENERIC_READ,
@@ -202,56 +229,146 @@ int wmain(int argc, wchar_t** argv)
 			if (fileHandle == INVALID_HANDLE_VALUE)
 			{
 				printf("Error: Failure open file read handle.\r\n");
-				succeedUpload = false;
 
-				break;
+				return 1;
 			}
 
-			LARGE_INTEGER fileSize;
+			LARGE_INTEGER fileSizeLarge;
 
-			if (!GetFileSizeEx(fileHandle, &fileSize))
+			if (!GetFileSizeEx(fileHandle, &fileSizeLarge))
 			{
 				printf("Error: Failure get file size.\r\n");
-				succeedUpload = false;
 
-				break;
+				return 1;
 			}
 
-			if (fileSize.QuadPart > MAX_FILE_SIZE)
+			if (fileSizeLarge.QuadPart > MAX_FILE_SIZE)
 			{
-				printf("Error: File size is too big. (Maximum %lld byte)\r\n", MAX_FILE_SIZE);
-				succeedUpload = false;
+				printf("Error: File size is too big. (Maximum %d byte)\r\n", MAX_FILE_SIZE);
 
-				break;
+				return 1;
 			}
+
+			int fileSize = (int)fileSizeLarge.QuadPart;
 
 			DWORD readBytes = 0;
 
-			if (!ReadFile(fileHandle, fileBuffer, fileSize.QuadPart, &readBytes, NULL))
+			if (!ReadFile(fileHandle, fileBuffer, fileSize, &readBytes, NULL))
 			{
 				printf("Error: Failure read file.\r\n");
-				succeedUpload = false;
 
-				break;
+				return 1;
 			}
 
-			if (readBytes != fileSize.QuadPart)
+			if (readBytes != fileSize)
 			{
 				printf("Error: Failure read all data of file.\r\n");
-				succeedUpload = false;
 
-				break;
+				return 1;
 			}
 
 			if (!CloseHandle(fileHandle))
 			{
 				printf("Error: Failure close file handle.\r\n");
-				succeedUpload = false;
 
-				break;
+				return 1;
 			}
+
+			UploadHeaderPacket uploadHeaderPacket = {
+				.filePathLength = uploadFilePathLength,
+				.fileSize = fileSize
+			};
+
+			if (sendBytes(clientSocket, (char*)&uploadHeaderPacket, sizeof(UploadHeaderPacket)) == SOCKET_ERROR)
+			{
+				printf("Error: Failure send upload header packet.\r\n");
+
+				return 1;
+			}
+
+			if (sendBytes(clientSocket, (char*)&uploadFilePath, sizeof(wchar_t) * (int)uploadFilePathLength) == SOCKET_ERROR)
+			{
+				printf("Error: Failure send upload file path.\r\n");
+
+				return 1;
+			}
+
+			if (sendBytes(clientSocket, (char*)&fileBuffer, fileSize) == SOCKET_ERROR)
+			{
+				printf("Error: Failure send upload file data.\r\n");
+
+				return 1;
+			}
+
+			ResponsePacket uploadResponsePacket;
+
+			if (recvBytes(clientSocket, (char*)&uploadResponsePacket, sizeof(ResponsePacket)) == SOCKET_ERROR)
+			{
+				printf("Error: Failure receive upload response packet.\r\n");
+
+				return 1;
+			}
+
+			if (uploadResponsePacket.responseState != RESPONSE_STATE_SUCCESS)
+			{
+				printf("Error: Failure file upload becuase %S.\r\n", getResponseStateString(uploadResponsePacket.responseState));
+
+				return 1;
+			}
+
+			printf("Info: Uploaded!\r\n");
 		}
 	}
+
+	printf("Info: Press any key to Install..\r\n");
+	getch();
+
+	wchar_t installFilePath[MAX_PATH];
+	int installFilePathLength;
+
+	wcscpy_s(installFilePath, MAX_PATH, directoryName);
+	wcscat_s(installFilePath, MAX_PATH, L"\\\0");
+	wcscat_s(installFilePath, MAX_PATH, installFileFullPath + uploadTargetFullPathLength + 1);
+
+	installFilePathLength = (int)wcsnlen_s(installFilePath, MAX_PATH);
+
+	printf("Info: Installing '%S' file..\r\n", installFilePath);
+
+	InstallPacket installPacket = {
+		.installFilePathLength = installFilePathLength
+	};
+
+	if (sendBytes(clientSocket, (char*)&installPacket, sizeof(InstallPacket)) == SOCKET_ERROR)
+	{
+		printf("Error: Failure send install packet.\r\n");
+
+		return 1;
+	}
+
+	if (sendBytes(clientSocket, (char*)&installFilePath, sizeof(wchar_t) * (int)installFilePathLength) == SOCKET_ERROR)
+	{
+		printf("Error: Failure send install file path.\r\n");
+
+		return 1;
+	}
+
+	ResponsePacket installResponsePacket;
+
+	if (recvBytes(clientSocket, (char*)&installResponsePacket, sizeof(ResponsePacket)) == SOCKET_ERROR)
+	{
+		printf("Error: Failure receive install response packet.\r\n");
+
+		return 1;
+	}
+
+	if (installResponsePacket.responseState != RESPONSE_STATE_SUCCESS)
+	{
+		printf("Error: Failure install driver becuase %S.\r\n", getResponseStateString(installResponsePacket.responseState));
+
+		return 1;
+	}
+
+	printf("Info: Installed!\r\n");
 
 	if (closesocket(clientSocket) == SOCKET_ERROR)
 	{

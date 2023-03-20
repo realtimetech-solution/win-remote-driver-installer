@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <stddef.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 #include <string.h>
 #include <memory.h>
@@ -18,10 +19,92 @@
 #pragma comment (lib, "ws2_32.lib")
 #pragma comment (lib, "shlwapi.lib")
 
-#define MAX_FILE_ENTRY_COUNT	1024
-#define MAX_FILE_SIZE			(long long) (2 ^ 26)
+typedef struct PreparePacket_t
+{
+	uint32_t	fileCount;
+	uint8_t		installationMode;
+} PreparePacket;
 
-bool findAllFiles(wchar_t* directory, wchar_t** files, int* count)
+typedef struct UploadHeaderPacket_t
+{
+	uint32_t	filePathLength;
+	uint32_t	fileSize;
+} UploadHeaderPacket;
+
+typedef struct ResponsePacket_t
+{
+	uint8_t		responseState;
+} ResponsePacket;
+
+typedef struct InstallPacket_t
+{
+	uint32_t	installFilePathLength;
+	// More options?
+} InstallPacket;
+
+#define MAX_FILE_ENTRY_COUNT	(1024)
+#define MAX_FILE_SIZE			(67108864)
+
+#define RESPONSE_STATE_SUCCESS			(0x00)
+#define RESPONSE_STATE_ERROR			(0x10)
+#define RESPONSE_STATE_ERROR_DELETE		(0x11)
+#define RESPONSE_STATE_ERROR_WRITE		(0x12)
+const wchar_t* getResponseStateString(const uint8_t value)
+{
+	switch (value)
+	{
+	case RESPONSE_STATE_SUCCESS:
+		return L"RESPONSE_STATE_SUCCESS";
+	case RESPONSE_STATE_ERROR:
+		return L"RESPONSE_STATE_ERROR";
+	case RESPONSE_STATE_ERROR_DELETE:
+		return L"RESPONSE_STATE_ERROR_DELETE";
+	case RESPONSE_STATE_ERROR_WRITE:
+		return L"RESPONSE_STATE_ERROR_WRITE";
+	}
+
+	if (value & RESPONSE_STATE_ERROR)
+	{
+		return L"RESPONSE_STATE_ERROR";
+	}
+
+	return L"RESPONSE_STATE_UNKNOWN";
+}
+
+#define INSTALLATION_MODE_DEBUG	(0x00)
+#define INSTALLATION_MODE_INF	(0x01)
+#define INSTALLATION_MODE_SYS	(0x02)
+const wchar_t* getInstallationModeString(const uint8_t value)
+{
+	switch (value)
+	{
+	case INSTALLATION_MODE_DEBUG:
+		return L"INSTALLATION_MODE_DEBUG";
+	case INSTALLATION_MODE_INF:
+		return L"INSTALLATION_MODE_INF";
+	case INSTALLATION_MODE_SYS:
+		return L"INSTALLATION_MODE_SYS";
+	}
+
+	return L"INSTALLATION_UNKNOWN";
+}
+
+bool removeLastPathSeparator(wchar_t* string, const size_t maxCount)
+{
+	size_t actualLength = wcsnlen_s(string, maxCount);
+	wchar_t lastCharacter = string[actualLength - 1];
+
+	if (lastCharacter == L'/' || lastCharacter == L'\\')
+	{
+		string[actualLength - 1] = L'\0';
+
+		return true;
+	}
+
+	return false;
+}
+
+bool findAllFiles(const wchar_t* directory, const wchar_t** files, size_t* count)
 {
 	wchar_t pattern[MAX_PATH];
 
@@ -53,7 +136,7 @@ bool findAllFiles(wchar_t* directory, wchar_t** files, int* count)
 				wcscat_s(subDirectory, MAX_PATH, L"\\");
 				wcscat_s(subDirectory, MAX_PATH, findData.cFileName);
 
-				int returnedCount = 0;
+				size_t returnedCount = 0;
 
 				findAllFiles(subDirectory, files + *count, &returnedCount);
 
@@ -97,13 +180,7 @@ bool findAllFiles(wchar_t* directory, wchar_t** files, int* count)
 
 bool createDirectories(wchar_t* path)
 {
-	wchar_t* buffer = malloc(sizeof(wchar_t) * MAX_PATH);
-
-	if (buffer == NULL)
-	{
-		return false;
-	}
-
+	wchar_t buffer[MAX_PATH];
 	buffer[0] = '\0';
 
 	wchar_t* remainPath = NULL;
@@ -115,8 +192,6 @@ bool createDirectories(wchar_t* path)
 
 		if (directoryNameLength < 1)
 		{
-			free(buffer);
-
 			return false;
 		}
 
@@ -127,8 +202,6 @@ bool createDirectories(wchar_t* path)
 		{
 			if (GetLastError() == ERROR_PATH_NOT_FOUND)
 			{
-				free(buffer);
-
 				return false;
 			}
 		}
@@ -136,9 +209,25 @@ bool createDirectories(wchar_t* path)
 		splitedPath = wcstok_s(NULL, L"\\/", &remainPath);
 	}
 
-	free(buffer);
-
 	return true;
+}
+
+int removeDirectory(const wchar_t* path)
+{
+	SHFILEOPSTRUCT operation = {
+		NULL,
+		FO_DELETE,
+		path,
+		L"",
+		FOF_NOCONFIRMATION |
+		FOF_NOERRORUI |
+		FOF_SILENT,
+		false,
+		0,
+		L""
+	};
+
+	return SHFileOperation(&operation);
 }
 
 int recvBytes(SOCKET socket, char* buffer, int length)
@@ -148,6 +237,25 @@ int recvBytes(SOCKET socket, char* buffer, int length)
 	while (offset < length)
 	{
 		int returnValue = recv(socket, buffer + offset, length - offset, 0);
+
+		if (returnValue <= 0)
+		{
+			return SOCKET_ERROR;
+		}
+
+		offset += returnValue;
+	}
+
+	return length;
+}
+
+int sendBytes(SOCKET socket, const char* data, int length)
+{
+	int offset = 0;
+
+	while (offset < length)
+	{
+		int returnValue = send(socket, data + offset, length - offset, 0);
 
 		if (returnValue <= 0)
 		{

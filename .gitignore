@@ -4,7 +4,7 @@
 
 /client/x64/Debug
 /server/x64/Debug
-/.vs/win-remote-driver-installer/v17
 /x64/Debug/*.exe
 /x64/Debug/*.pdb
-/.vs/win-remote-driver-installer/FileContentIndex
+/.vs
+/x64/Debug/shared/*
