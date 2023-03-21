@@ -8,14 +8,14 @@ int wmain(int argc, wchar_t** argv)
 	{
 		printf("Error: Not supported in system that wide character is not 2 bytes.\r\n");
 
-		return -1;
+		return 1;
 	}
 
-	if (argc != 5)
+	if (argc != 6)
 	{
-		printf("Usage: wrdi-client.exe <Server> <Port> <Upload Directory or File> <Install File>\r\n");
+		printf("Usage: wrdi-client.exe <Server> <Port> <Driver Name> <Upload Directory or File> <Install File>\r\n");
 
-		return -1;
+		return 2;
 	}
 
 	wchar_t* server = argv[1];
@@ -25,7 +25,7 @@ int wmain(int argc, wchar_t** argv)
 	{
 		printf("Error: Given host is not valid.\r\n");
 
-		return -1;
+		return 2;
 	}
 
 	wchar_t* portArgument = argv[2];
@@ -37,37 +37,44 @@ int wmain(int argc, wchar_t** argv)
 		{
 			printf("Error: Given port number is not integer.\r\n");
 
-			return -1;
+			return 2;
 		}
 	}
 
-	wchar_t* uploadTarget = argv[3];
-	removeLastPathSeparator(uploadTarget, MAX_PATH);
+	wchar_t* driverName = argv[3];
+	int driverNameLength = (int) wcslen(driverName);
+
+	if(driverNameLength > MAX_DRIVER_NAME_LENGTH) {
+		printf("Error: Given driver name is too long.\r\n");
+
+		return 2;
+	}
+
+	wchar_t* uploadTarget = removeLastPathSeparator(argv[4]);
 	DWORD uploadTargetAttributes = GetFileAttributesW(uploadTarget);
 
 	if (uploadTargetAttributes == INVALID_FILE_ATTRIBUTES)
 	{
 		printf("Error: Not valid upload target directory or file.\r\n");
 
-		return -1;
+		return 2;
 	}
 
-	wchar_t* installFile = argv[4];
-	removeLastPathSeparator(installFile, MAX_PATH);
+	wchar_t* installFile = removeLastPathSeparator(argv[5]);
 	DWORD installFileAttributes = GetFileAttributesW(installFile);
 
 	if (installFileAttributes == INVALID_FILE_ATTRIBUTES)
 	{
 		printf("Error: Not valid install file.\r\n");
 
-		return -1;
+		return 2;
 	}
 
 	if (installFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
 	{
 		printf("Error: Given install file is directory.\r\n");
 
-		return -1;
+		return 2;
 	}
 
 	wchar_t uploadTargetFullPath[MAX_PATH];
@@ -77,7 +84,7 @@ int wmain(int argc, wchar_t** argv)
 	{
 		printf("Error: Failure get full path of upload target path.\r\n");
 
-		return -1;
+		return 2;
 	}
 
 	wchar_t installFileFullPath[MAX_PATH];
@@ -87,7 +94,7 @@ int wmain(int argc, wchar_t** argv)
 	{
 		printf("Error: Failure get full path of install file.\r\n");
 
-		return -1;
+		return 2;
 	}
 
 	// Check install file exists in upload target
@@ -99,7 +106,7 @@ int wmain(int argc, wchar_t** argv)
 		{
 			printf("Error: Install file is not contains in upload target directory.\r\n");
 
-			return -1;
+			return 2;
 		}
 	}
 	else
@@ -108,6 +115,8 @@ int wmain(int argc, wchar_t** argv)
 			wcsncmp(installFileFullPath, uploadTargetFullPath, installFileFullPathLength) != 0)
 		{
 			printf("Error: Install file is not upload target file.\r\n");
+
+			return 2;
 		}
 	}
 
@@ -146,7 +155,7 @@ int wmain(int argc, wchar_t** argv)
 		return 1;
 	}
 
-	char installationMode = INSTALLATION_MODE_DEBUG;
+	char installationMode = '\0';
 
 	if (_wcsicmp(installFileExtension, L".inf") == 0)
 	{
@@ -156,17 +165,28 @@ int wmain(int argc, wchar_t** argv)
 	{
 		installationMode = INSTALLATION_MODE_SYS;
 	}
+	else if (_wcsicmp(installFileExtension, L".txt") == 0)
+	{
+		installationMode = INSTALLATION_MODE_DEBUG;
+	}
+	else
+	{
+		printf("Error: Unknown install file extension.\r\n");
+
+		return 1;
+	}
 
 	printf("Info: Installation mode is %S\r\n", getInstallationModeString(installationMode));
 
 	printf("Info: Prepare upload targets..\r\n");
 
+	bool directoryMode = uploadTargetAttributes & FILE_ATTRIBUTE_DIRECTORY;
 	wchar_t* directoryName = PathFindFileNameW(uploadTargetFullPath);
 
 	wchar_t* uploadFiles[MAX_FILE_ENTRY_COUNT];
 	size_t uploadFileCount = 0;
 
-	if (uploadTargetAttributes & FILE_ATTRIBUTE_DIRECTORY)
+	if (directoryMode)
 	{
 		if (!findAllFiles(uploadTargetFullPath, uploadFiles, &uploadFileCount))
 		{
@@ -188,6 +208,7 @@ int wmain(int argc, wchar_t** argv)
 	printf("Info: Send prepare packet.\r\n");
 
 	PreparePacket preparePacket = {
+		.driverNameLength = driverNameLength,
 		.fileCount = (uint32_t)uploadFileCount,
 		.installationMode = installationMode
 	};
@@ -195,6 +216,29 @@ int wmain(int argc, wchar_t** argv)
 	if (sendBytes(clientSocket, (char*)&preparePacket, sizeof(PreparePacket)) == SOCKET_ERROR)
 	{
 		printf("Error: Failure send prepare packet.\r\n");
+
+		return 1;
+	}
+
+	if (sendBytes(clientSocket, (char*)driverName, sizeof(wchar_t) * driverNameLength) == SOCKET_ERROR)
+	{
+		printf("Error: Failure send driver name.\r\n");
+
+		return 1;
+	}
+
+	ResponsePacket prepareResponsePacket;
+
+	if (recvBytes(clientSocket, (char*)&prepareResponsePacket, sizeof(ResponsePacket)) == SOCKET_ERROR)
+	{
+		printf("Error: Failure receive prepare response packet.\r\n");
+
+		return 1;
+	}
+
+	if (prepareResponsePacket.responseState != RESPONSE_STATE_SUCCESS)
+	{
+		printf("Error: Failure prepare becuase %S.\r\n", getResponseStateString(prepareResponsePacket.responseState));
 
 		return 1;
 	}
@@ -210,9 +254,17 @@ int wmain(int argc, wchar_t** argv)
 			wchar_t uploadFilePath[MAX_PATH];
 			int uploadFilePathLength;
 
-			wcscpy_s(uploadFilePath, MAX_PATH, directoryName);
-			wcscat_s(uploadFilePath, MAX_PATH, L"\\\0");
-			wcscat_s(uploadFilePath, MAX_PATH, filePath + uploadTargetFullPathLength + 1);
+			if (directoryMode)
+			{
+				wcscpy_s(uploadFilePath, MAX_PATH, directoryName);
+				wcscat_s(uploadFilePath, MAX_PATH, L"\\\0");
+				wcscat_s(uploadFilePath, MAX_PATH, filePath + uploadTargetFullPathLength + 1);
+			}
+			else
+			{
+				wcscpy_s(uploadFilePath, MAX_PATH, filePath);
+				PathStripPathW(uploadFilePath);
+			}
 
 			uploadFilePathLength = (int) wcsnlen_s(uploadFilePath, MAX_PATH);
 
@@ -244,7 +296,7 @@ int wmain(int argc, wchar_t** argv)
 
 			if (fileSizeLarge.QuadPart > MAX_FILE_SIZE)
 			{
-				printf("Error: File size is too big. (Maximum %d byte)\r\n", MAX_FILE_SIZE);
+				printf("Error: File size is too big.\r\n");
 
 				return 1;
 			}
@@ -326,9 +378,17 @@ int wmain(int argc, wchar_t** argv)
 	wchar_t installFilePath[MAX_PATH];
 	int installFilePathLength;
 
-	wcscpy_s(installFilePath, MAX_PATH, directoryName);
-	wcscat_s(installFilePath, MAX_PATH, L"\\\0");
-	wcscat_s(installFilePath, MAX_PATH, installFileFullPath + uploadTargetFullPathLength + 1);
+	if (directoryMode)
+	{
+		wcscpy_s(installFilePath, MAX_PATH, directoryName);
+		wcscat_s(installFilePath, MAX_PATH, L"\\\0");
+		wcscat_s(installFilePath, MAX_PATH, installFileFullPath + uploadTargetFullPathLength + 1);
+	}
+	else
+	{
+		wcscpy_s(installFilePath, MAX_PATH, installFileFullPath);
+		PathStripPathW(installFilePath);
+	}
 
 	installFilePathLength = (int)wcsnlen_s(installFilePath, MAX_PATH);
 

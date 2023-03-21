@@ -56,33 +56,113 @@ int runService(IN_ADDR* hostAddress, int port, wchar_t* workingDirectory)
 		inet_ntop(AF_INET, &(clientAddress.sin_addr), clientAddressString, INET_ADDRSTRLEN);
 		printf("Info: Connected Client %s:%d..\r\n", clientAddressString, clientAddress.sin_port);
 
+		ResponsePacket prepareResponsePacket = {
+			.responseState = RESPONSE_STATE_ERROR
+		};
+
 		PreparePacket preparePacket;
 
 		if (recvBytes(clientSocket, (char*)&preparePacket, sizeof(PreparePacket)) == SOCKET_ERROR)
 		{
 			printf("Error: Failure receive prepare packet.\r\n");
+			prepareResponsePacket.responseState = RESPONSE_STATE_ERROR_NETWORK;
+
+			goto RESPONSE_PREPARE;
+		}
+
+		if (preparePacket.driverNameLength >= MAX_DRIVER_NAME_LENGTH)
+		{
+			printf("Error: Received driver name length is too long.\r\n");
+			prepareResponsePacket.responseState = RESPONSE_STATE_ERROR_INTERNAL;
+
+			goto RESPONSE_PREPARE;
+		}
+
+		wchar_t driverName[MAX_DRIVER_NAME_LENGTH];
+
+		if (recvBytes(clientSocket, (char*)&driverName, sizeof(wchar_t) * preparePacket.driverNameLength) == SOCKET_ERROR)
+		{
+			printf("Error: Failure receive driver name.\r\n");
+			prepareResponsePacket.responseState = RESPONSE_STATE_ERROR_NETWORK;
+
+			goto RESPONSE_PREPARE;
+		}
+
+		driverName[preparePacket.driverNameLength] = '\0';
+
+		printf("Info: Driver Name is %S\r\n", driverName);
+		printf("Info: Installation Mode is %S\r\n", getInstallationModeString(preparePacket.installationMode));
+
+		switch (preparePacket.installationMode)
+		{
+		case INSTALLATION_MODE_DEBUG:
+			printf("Info: Debug Mode..\r\n");
+			prepareResponsePacket.responseState = RESPONSE_STATE_SUCCESS;
 
 			break;
+		case INSTALLATION_MODE_SYS:
+			printf("Info: Cleaning already exists sys driver..\r\n");
+
+			if (!cleanDriverSys(driverName))
+			{
+				printf("Error: Failure clean sys driver.\r\n");
+				prepareResponsePacket.responseState = RESPONSE_STATE_ERROR_DRIVER_CLEAN;
+
+				break;
+			}
+
+			printf("Info: Cleaned!\r\n");
+
+			prepareResponsePacket.responseState = RESPONSE_STATE_SUCCESS;
+
+			break;
+		case INSTALLATION_MODE_INF:
+			printf("Error: Currently not supported installation mode.\r\n");
+			prepareResponsePacket.responseState = RESPONSE_STATE_ERROR_NOT_IMPLEMENTED;
+
+			break;
+		default:
+			printf("Error: Received unknown installation mode.\r\n");
+			prepareResponsePacket.responseState = RESPONSE_STATE_ERROR_NOT_IMPLEMENTED;
+
+			break;
+		}
+
+	RESPONSE_PREPARE:
+		if (sendBytes(clientSocket, (char*)&prepareResponsePacket, sizeof(ResponsePacket)) == SOCKET_ERROR)
+		{
+			printf("Error: Failure prepare response packet.\r\n");
+		}
+
+		if (prepareResponsePacket.responseState != RESPONSE_STATE_SUCCESS)
+		{
+			continue;
 		}
 
 		printf("Info: Start receving %d files..\r\n", preparePacket.fileCount);
 
 		for (uint32_t fileIndex = 0; fileIndex < preparePacket.fileCount; fileIndex++)
 		{
+			ResponsePacket uploadResponsePacket = {
+				.responseState = RESPONSE_STATE_ERROR
+			};
+
 			UploadHeaderPacket uploadHeaderPacket;
 
 			if (recvBytes(clientSocket, (char*)&uploadHeaderPacket, sizeof(UploadHeaderPacket)) == SOCKET_ERROR)
 			{
 				printf("Error: Failure receive upload header packet.\r\n");
+				uploadResponsePacket.responseState = RESPONSE_STATE_ERROR_NETWORK;
 
-				break;
+				goto RESPONSE_UPLOAD;
 			}
 
 			if (uploadHeaderPacket.filePathLength >= MAX_PATH)
 			{
 				printf("Error: Received file path length is too big.\r\n");
+				uploadResponsePacket.responseState = RESPONSE_STATE_ERROR_INTERNAL;
 
-				break;
+				goto RESPONSE_UPLOAD;
 			}
 
 			wchar_t filePath[MAX_PATH];
@@ -90,8 +170,9 @@ int runService(IN_ADDR* hostAddress, int port, wchar_t* workingDirectory)
 			if (recvBytes(clientSocket, (char*)&filePath, sizeof(wchar_t) * uploadHeaderPacket.filePathLength) == SOCKET_ERROR)
 			{
 				printf("Error: Failure receive file path.\r\n");
+				uploadResponsePacket.responseState = RESPONSE_STATE_ERROR_NETWORK;
 
-				break;
+				goto RESPONSE_UPLOAD;
 			}
 
 			filePath[uploadHeaderPacket.filePathLength] = '\0';
@@ -101,45 +182,49 @@ int runService(IN_ADDR* hostAddress, int port, wchar_t* workingDirectory)
 			if (uploadHeaderPacket.fileSize == 0 || uploadHeaderPacket.fileSize > MAX_FILE_SIZE)
 			{
 				printf("Error: Invalid file size.\r\n");
+				uploadResponsePacket.responseState = RESPONSE_STATE_ERROR_INTERNAL;
 
-				break;
+				goto RESPONSE_UPLOAD;
 			}
 
 			if (recvBytes(clientSocket, fileBuffer, uploadHeaderPacket.fileSize) == SOCKET_ERROR)
 			{
 				printf("Error: Failure receive file data.\r\n");
+				uploadResponsePacket.responseState = RESPONSE_STATE_ERROR_NETWORK;
 
-				break;
+				goto RESPONSE_UPLOAD;
 			}
 
-			wchar_t fullPath[MAX_PATH];
+			wchar_t fileWithWorkingDirectoryPath[MAX_PATH];
 
-			if (PathCombineW(fullPath, workingDirectory, filePath) == NULL)
+			if (PathCombineW(fileWithWorkingDirectoryPath, workingDirectory, filePath) == NULL)
 			{
 				printf("Error: Failure path combine.\r\n");
+				uploadResponsePacket.responseState = RESPONSE_STATE_ERROR_INTERNAL;
 
-				break;
+				goto RESPONSE_UPLOAD;
 			}
 
 			wchar_t directoryPath[MAX_PATH];
-			wcscpy_s(directoryPath, MAX_PATH, fullPath);
+			wcscpy_s(directoryPath, MAX_PATH, fileWithWorkingDirectoryPath);
 
 			if (!PathRemoveFileSpecW(directoryPath))
 			{
 				printf("Error: Failure remove file name in full path.\r\n");
+				uploadResponsePacket.responseState = RESPONSE_STATE_ERROR_INTERNAL;
 
-				break;
+				goto RESPONSE_UPLOAD;
 			}
 
 			if (!createDirectories(directoryPath))
 			{
 				printf("Error: Failure create sub directories.\r\n");
+				uploadResponsePacket.responseState = RESPONSE_STATE_ERROR_INTERNAL;
 
-				break;
+				goto RESPONSE_UPLOAD;
 			}
 
-
-			DWORD uploadFileAttributes = GetFileAttributesW(fullPath);
+			DWORD uploadFileAttributes = GetFileAttributesW(fileWithWorkingDirectoryPath);
 
 			if (uploadFileAttributes != INVALID_FILE_ATTRIBUTES)
 			{
@@ -147,14 +232,14 @@ int runService(IN_ADDR* hostAddress, int port, wchar_t* workingDirectory)
 
 				if (uploadFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
 				{
-					if (removeDirectory(fullPath) != 0)
+					if (removeDirectory(fileWithWorkingDirectoryPath) != 0)
 					{
 						succeedDelete = false;
 					}
 				}
 				else
 				{
-					if (!DeleteFileW(fullPath))
+					if (!DeleteFileW(fileWithWorkingDirectoryPath))
 					{
 						succeedDelete = false;
 					}
@@ -162,20 +247,13 @@ int runService(IN_ADDR* hostAddress, int port, wchar_t* workingDirectory)
 
 				if (!succeedDelete)
 				{
-					ResponsePacket responsePacket = {
-						.responseState = RESPONSE_STATE_ERROR_DELETE
-					};
+					uploadResponsePacket.responseState = RESPONSE_STATE_ERROR_DELETE;
 
-					if (sendBytes(clientSocket, (char*)&responsePacket, sizeof(ResponsePacket)) == SOCKET_ERROR)
-					{
-						printf("Error: Failure response packet.\r\n");
-					}
-
-					return 1;
+					goto RESPONSE_UPLOAD;
 				}
 			}
 
-			HANDLE fileHandle = CreateFileW(fullPath,
+			HANDLE fileHandle = CreateFileW(fileWithWorkingDirectoryPath,
 											GENERIC_WRITE,
 											0,
 											NULL,
@@ -186,17 +264,9 @@ int runService(IN_ADDR* hostAddress, int port, wchar_t* workingDirectory)
 			if (fileHandle == INVALID_HANDLE_VALUE)
 			{
 				printf("Error: Failure open file write handle.\r\n");
+				uploadResponsePacket.responseState = RESPONSE_STATE_ERROR_INTERNAL;
 
-				ResponsePacket responsePacket = {
-					.responseState = RESPONSE_STATE_ERROR_WRITE
-				};
-
-				if (sendBytes(clientSocket, (char*)&responsePacket, sizeof(ResponsePacket)) == SOCKET_ERROR)
-				{
-					printf("Error: Failure response packet.\r\n");
-				}
-
-				break;
+				goto RESPONSE_UPLOAD;
 			}
 
 			DWORD writtenBytes = 0;
@@ -204,47 +274,36 @@ int runService(IN_ADDR* hostAddress, int port, wchar_t* workingDirectory)
 			if (!WriteFile(fileHandle, fileBuffer, uploadHeaderPacket.fileSize, &writtenBytes, NULL))
 			{
 				printf("Error: Failure write file.\r\n");
+				uploadResponsePacket.responseState = RESPONSE_STATE_ERROR_INTERNAL;
 
-				ResponsePacket responsePacket = {
-					.responseState = RESPONSE_STATE_ERROR_WRITE
-				};
-
-				if (sendBytes(clientSocket, (char*)&responsePacket, sizeof(ResponsePacket)) == SOCKET_ERROR)
-				{
-					printf("Error: Failure response packet.\r\n");
-				}
-
-				break;
+				goto RESPONSE_UPLOAD;
 			}
 
 			if (writtenBytes != uploadHeaderPacket.fileSize)
 			{
 				printf("Error: Failure write all data to file.\r\n");
+				uploadResponsePacket.responseState = RESPONSE_STATE_ERROR_INTERNAL;
 
-				ResponsePacket responsePacket = {
-					.responseState = RESPONSE_STATE_ERROR_WRITE
-				};
-
-				if (sendBytes(clientSocket, (char*)&responsePacket, sizeof(ResponsePacket)) == SOCKET_ERROR)
-				{
-					printf("Error: Failure response packet.\r\n");
-				}
-
-				break;
+				goto RESPONSE_UPLOAD;
 			}
 
 			if (!CloseHandle(fileHandle))
 			{
 				printf("Error: Failure close file handle.\r\n");
+				// Ignore
 			}
 
-			ResponsePacket uploadResponsePacket = {
-				.responseState = RESPONSE_STATE_SUCCESS
-			};
+			uploadResponsePacket.responseState = RESPONSE_STATE_SUCCESS;
 
+		RESPONSE_UPLOAD:
 			if (sendBytes(clientSocket, (char*)&uploadResponsePacket, sizeof(ResponsePacket)) == SOCKET_ERROR)
 			{
 				printf("Error: Failure upload response packet.\r\n");
+			}
+
+			if (uploadResponsePacket.responseState != RESPONSE_STATE_SUCCESS)
+			{
+				break;
 			}
 
 			printf("Info: Received!\r\n");
@@ -252,13 +311,18 @@ int runService(IN_ADDR* hostAddress, int port, wchar_t* workingDirectory)
 
 		printf("Info: Waiting for install signal..\r\n");
 
+		ResponsePacket installResponsePacket = {
+			.responseState = RESPONSE_STATE_ERROR
+		};
+
 		InstallPacket installPacket;
 
 		if (recvBytes(clientSocket, (char*)&installPacket, sizeof(InstallPacket)) == SOCKET_ERROR)
 		{
 			printf("Error: Failure receive install packet.\r\n");
+			installResponsePacket.responseState = RESPONSE_STATE_ERROR_NETWORK;
 
-			break;
+			goto RESPONSE_INSTALL;
 		}
 
 		wchar_t installFilePath[MAX_PATH];
@@ -266,31 +330,76 @@ int runService(IN_ADDR* hostAddress, int port, wchar_t* workingDirectory)
 		if (recvBytes(clientSocket, (char*)&installFilePath, sizeof(wchar_t) * installPacket.installFilePathLength) == SOCKET_ERROR)
 		{
 			printf("Error: Failure receive install file path.\r\n");
+			installResponsePacket.responseState = RESPONSE_STATE_ERROR_INTERNAL;
 
-			break;
+			goto RESPONSE_INSTALL;
 		}
 
 		installFilePath[installPacket.installFilePathLength] = '\0';
 
-		wchar_t installFileFullPath[MAX_PATH];
+		wchar_t installFileWithWorkingDirectoryPath[MAX_PATH];
 
-		if (PathCombineW(installFileFullPath, workingDirectory, installFilePath) == NULL)
+		if (PathCombineW(installFileWithWorkingDirectoryPath, workingDirectory, installFilePath) == NULL)
 		{
 			printf("Error: Failure path combine.\r\n");
+			installResponsePacket.responseState = RESPONSE_STATE_ERROR_INTERNAL;
+
+			goto RESPONSE_INSTALL;
+		}
+
+		wchar_t installFileFullPath[MAX_PATH];
+		size_t installFileFullPathLength = GetFullPathNameW(installFileWithWorkingDirectoryPath, MAX_PATH, installFileFullPath, NULL);
+
+		if (installFileFullPathLength < 0 || installFileFullPathLength >= MAX_PATH)
+		{
+			printf("Error: Failure get full path of install file path.\r\n");
+			installResponsePacket.responseState = RESPONSE_STATE_ERROR_INTERNAL;
+
+			goto RESPONSE_INSTALL;
+		}
+
+		switch (preparePacket.installationMode)
+		{
+		case INSTALLATION_MODE_DEBUG:
+			/*
+			printf("Info: Debug Mode..\r\n");
+			installResponsePacket.responseState = RESPONSE_STATE_SUCCESS;
+
+			break;
+			*/
+		case INSTALLATION_MODE_SYS:
+			if (!startDriverSys(driverName, installFileFullPath))
+			{
+				printf("Error: Failure start sys driver.\r\n");
+				installResponsePacket.responseState = RESPONSE_STATE_ERROR_DRIVER_START;
+
+				break;
+			}
+
+			installResponsePacket.responseState = RESPONSE_STATE_SUCCESS;
+
+			break;
+		case INSTALLATION_MODE_INF:
+			printf("Error: Currently not supported installation mode.\r\n");
+			installResponsePacket.responseState = RESPONSE_STATE_ERROR_NOT_IMPLEMENTED;
+
+			break;
+		default:
+			printf("Error: Received unknown installation mode.\r\n");
+			installResponsePacket.responseState = RESPONSE_STATE_ERROR_NOT_IMPLEMENTED;
 
 			break;
 		}
-		
-		// Install with installFileFullPath and preparePacket.installationMode
-		// and
 
-		ResponsePacket installResponsePacket = {
-			.responseState = RESPONSE_STATE_SUCCESS
-		};
-
+	RESPONSE_INSTALL:
 		if (sendBytes(clientSocket, (char*)&installResponsePacket, sizeof(ResponsePacket)) == SOCKET_ERROR)
 		{
 			printf("Error: Failure install response packet.\r\n");
+		}
+
+		if (installResponsePacket.responseState == RESPONSE_STATE_SUCCESS)
+		{
+			printf("Info: Installed!\r\n");
 		}
 
 	}
@@ -315,14 +424,14 @@ int wmain(int argc, wchar_t** argv)
 	{
 		printf("Error: Not supported in system that wide character is not 2 bytes.\r\n");
 
-		return -1;
+		return 1;
 	}
 
 	if (argc != 4)
 	{
 		printf("Usage: wrdi-server.exe <Host> <Port> <Working Directory>\r\n");
 
-		return -1;
+		return 2;
 	}
 
 	wchar_t* host = argv[1];
@@ -332,7 +441,7 @@ int wmain(int argc, wchar_t** argv)
 	{
 		printf("Error: Given host is not valid.\r\n");
 
-		return -1;
+		return 2;
 	}
 
 	wchar_t* portArgument = argv[2];
@@ -344,26 +453,25 @@ int wmain(int argc, wchar_t** argv)
 		{
 			printf("Error: Given port number is not integer.\r\n");
 
-			return -1;
+			return 2;
 		}
 	}
 
-	wchar_t* workingDirectory = argv[3];
-	removeLastPathSeparator(workingDirectory, MAX_PATH);
+	wchar_t* workingDirectory = removeLastPathSeparator(argv[3]);
 	DWORD attributes = GetFileAttributesW(workingDirectory);
 
 	if (attributes == INVALID_FILE_ATTRIBUTES)
 	{
 		printf("Error: Not valid working directory.\r\n");
 
-		return -1;
+		return 2;
 	}
 
 	if (!(attributes & FILE_ATTRIBUTE_DIRECTORY))
 	{
 		printf("Error: Given working directory is not directory.\r\n");
 
-		return -1;
+		return 2;
 	}
 
 	return runService(&hostAddress, port, workingDirectory);

@@ -8,3 +8,5 @@
 /x64/Debug/*.pdb
 /.vs
 /x64/Debug/shared/*
+/client/x64/Release
+/server/x64/Release

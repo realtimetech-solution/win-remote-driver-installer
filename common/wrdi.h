@@ -16,11 +16,15 @@
 #include <Ws2tcpip.h>
 #include <shlwapi.h>
 
+#include "sys_driver.h"
+
 #pragma comment (lib, "ws2_32.lib")
 #pragma comment (lib, "shlwapi.lib")
 
+#pragma pack(push, 1)
 typedef struct PreparePacket_t
 {
+	uint32_t	driverNameLength;
 	uint32_t	fileCount;
 	uint8_t		installationMode;
 } PreparePacket;
@@ -41,14 +45,36 @@ typedef struct InstallPacket_t
 	uint32_t	installFilePathLength;
 	// More options?
 } InstallPacket;
+#pragma pack(pop)
 
+#define MAX_DRIVER_NAME_LENGTH	(512)
 #define MAX_FILE_ENTRY_COUNT	(1024)
 #define MAX_FILE_SIZE			(67108864)
 
-#define RESPONSE_STATE_SUCCESS			(0x00)
-#define RESPONSE_STATE_ERROR			(0x10)
-#define RESPONSE_STATE_ERROR_DELETE		(0x11)
-#define RESPONSE_STATE_ERROR_WRITE		(0x12)
+#define RESPONSE_STATE_SUCCESS						(0x00)
+#define RESPONSE_STATE_ERROR						(0x10)
+#define RESPONSE_STATE_ERROR_NETWORK				(0x11)
+#define RESPONSE_STATE_ERROR_DELETE					(0x12)
+#define RESPONSE_STATE_ERROR_INTERNAL				(0x13)
+#define RESPONSE_STATE_ERROR_DRIVER_CLEAN			(0x14)
+#define RESPONSE_STATE_ERROR_DRIVER_START			(0x15)
+#define RESPONSE_STATE_ERROR_NOT_IMPLEMENTED		(0x16)
+
+wchar_t* removeLastPathSeparator(wchar_t* string)
+{
+	size_t actualLength = wcslen(string);
+	wchar_t lastCharacter = string[actualLength - 1];
+
+	if (lastCharacter == L'/' || lastCharacter == L'\\')
+	{
+		string[actualLength - 1] = L'\0';
+
+		return string;
+	}
+
+	return string;
+}
+
 const wchar_t* getResponseStateString(const uint8_t value)
 {
 	switch (value)
@@ -58,9 +84,17 @@ const wchar_t* getResponseStateString(const uint8_t value)
 	case RESPONSE_STATE_ERROR:
 		return L"RESPONSE_STATE_ERROR";
 	case RESPONSE_STATE_ERROR_DELETE:
+		return L"RESPONSE_STATE_ERROR_NETWORK";
+	case RESPONSE_STATE_ERROR_NETWORK:
 		return L"RESPONSE_STATE_ERROR_DELETE";
-	case RESPONSE_STATE_ERROR_WRITE:
-		return L"RESPONSE_STATE_ERROR_WRITE";
+	case RESPONSE_STATE_ERROR_INTERNAL:
+		return L"RESPONSE_STATE_ERROR_INTERNAL";
+	case RESPONSE_STATE_ERROR_DRIVER_CLEAN:
+		return L"RESPONSE_STATE_ERROR_DRIVER_CLEAN";
+	case RESPONSE_STATE_ERROR_DRIVER_START:
+		return L"RESPONSE_STATE_ERROR_DRIVER_START";
+	case RESPONSE_STATE_ERROR_NOT_IMPLEMENTED:
+		return L"RESPONSE_STATE_ERROR_NOT_IMPLEMENTED";
 	}
 
 	if (value & RESPONSE_STATE_ERROR)
@@ -72,36 +106,21 @@ const wchar_t* getResponseStateString(const uint8_t value)
 }
 
 #define INSTALLATION_MODE_DEBUG	(0x00)
-#define INSTALLATION_MODE_INF	(0x01)
-#define INSTALLATION_MODE_SYS	(0x02)
+#define INSTALLATION_MODE_SYS	(0x01)
+#define INSTALLATION_MODE_INF	(0x02)
 const wchar_t* getInstallationModeString(const uint8_t value)
 {
 	switch (value)
 	{
 	case INSTALLATION_MODE_DEBUG:
 		return L"INSTALLATION_MODE_DEBUG";
-	case INSTALLATION_MODE_INF:
-		return L"INSTALLATION_MODE_INF";
 	case INSTALLATION_MODE_SYS:
 		return L"INSTALLATION_MODE_SYS";
+	case INSTALLATION_MODE_INF:
+		return L"INSTALLATION_MODE_INF";
 	}
 
 	return L"INSTALLATION_UNKNOWN";
-}
-
-bool removeLastPathSeparator(wchar_t* string, const size_t maxCount)
-{
-	size_t actualLength = wcsnlen_s(string, maxCount);
-	wchar_t lastCharacter = string[actualLength - 1];
-
-	if (lastCharacter == L'/' || lastCharacter == L'\\')
-	{
-		string[actualLength - 1] = L'\0';
-
-		return true;
-	}
-
-	return false;
 }
 
 bool findAllFiles(const wchar_t* directory, const wchar_t** files, size_t* count)
@@ -118,7 +137,7 @@ bool findAllFiles(const wchar_t* directory, const wchar_t** files, size_t* count
 	if (findHandle == INVALID_HANDLE_VALUE)
 	{
 		printf("Error: Invalid file find handle.\r\n");
-
+		
 		return false;
 	}
 
