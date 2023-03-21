@@ -5,157 +5,157 @@
 
 bool startDriverSys(const wchar_t* driverName, const wchar_t* driverFilePath)
 {
-	bool returnValue = true;
+    bool returnValue = true;
 
-	SC_HANDLE scManagerHandle = NULL;
-	SC_HANDLE serviceHandle = NULL;
+    SC_HANDLE scManagerHandle = NULL;
+    SC_HANDLE serviceHandle = NULL;
 
-	scManagerHandle = OpenSCManagerW(NULL, NULL, SC_MANAGER_ALL_ACCESS);
+    scManagerHandle = OpenSCManagerW(NULL, NULL, SC_MANAGER_ALL_ACCESS);
 
-	if (scManagerHandle == NULL)
-	{
-		DWORD lastError = GetLastError();
+    if (scManagerHandle == NULL)
+    {
+        DWORD lastError = GetLastError();
 
-		printf("Error: Failure open sc manager. (LastError %d)\r\n", lastError);
-		returnValue = false;
+        printf("Error: Failure open sc manager. (LastError %d)\r\n", lastError);
+        returnValue = false;
 
-		goto RETURN;
-	}
+        goto RETURN;
+    }
 
-	// More options?
-	serviceHandle = CreateServiceW(scManagerHandle,
-								   driverName,
-								   driverName,
-								   SERVICE_ALL_ACCESS,
-								   SERVICE_KERNEL_DRIVER,
-								   SERVICE_DEMAND_START,
-								   SERVICE_ERROR_NORMAL,
-								   driverFilePath,
-								   NULL,
-								   NULL,
-								   NULL,
-								   NULL,
-								   NULL
-	);
+    // More options?
+    serviceHandle = CreateServiceW(scManagerHandle,
+                                   driverName,
+                                   driverName,
+                                   SERVICE_ALL_ACCESS,
+                                   SERVICE_KERNEL_DRIVER,
+                                   SERVICE_DEMAND_START,
+                                   SERVICE_ERROR_NORMAL,
+                                   driverFilePath,
+                                   NULL,
+                                   NULL,
+                                   NULL,
+                                   NULL,
+                                   NULL
+    );
 
 
-	if (serviceHandle == NULL)
-	{
-		DWORD lastError = GetLastError();
+    if (serviceHandle == NULL)
+    {
+        DWORD lastError = GetLastError();
 
-		printf("Error: Failure create service. (LastError %d)\r\n", lastError);
-		returnValue = false;
+        printf("Error: Failure create service. (LastError %d)\r\n", lastError);
+        returnValue = false;
 
-		goto RETURN;
-	}
+        goto RETURN;
+    }
 
-	if (StartServiceW(serviceHandle, 0, NULL) != TRUE)
-	{
-		DWORD lastError = GetLastError();
+    if (StartServiceW(serviceHandle, 0, NULL) != TRUE)
+    {
+        DWORD lastError = GetLastError();
 
-		printf("Error: Failure start service. (LastError %d)\r\n", lastError);
-		returnValue = false;
+        printf("Error: Failure start service. (LastError %d)\r\n", lastError);
+        returnValue = false;
 
-		goto RETURN;
-	}
+        goto RETURN;
+    }
 
 RETURN:
-	if (scManagerHandle != NULL)
-	{
-		CloseServiceHandle(scManagerHandle);
-	}
+    if (scManagerHandle != NULL)
+    {
+        CloseServiceHandle(scManagerHandle);
+    }
 
-	if (serviceHandle != NULL)
-	{
-		CloseServiceHandle(serviceHandle);
-	}
+    if (serviceHandle != NULL)
+    {
+        CloseServiceHandle(serviceHandle);
+    }
 
-	return returnValue;
+    return returnValue;
 }
 
 
 bool cleanDriverSys(const wchar_t* driverName)
 {
-	bool returnValue = true;
+    bool returnValue = true;
 
-	SC_HANDLE scManagerHandle = NULL;
-	SC_HANDLE serviceHandle = NULL;
+    SC_HANDLE scManagerHandle = NULL;
+    SC_HANDLE serviceHandle = NULL;
 
-	scManagerHandle = OpenSCManagerW(NULL, NULL, SC_MANAGER_ALL_ACCESS);
+    scManagerHandle = OpenSCManagerW(NULL, NULL, SC_MANAGER_ALL_ACCESS);
 
-	if (scManagerHandle == NULL)
-	{
-		DWORD lastError = GetLastError();
+    if (scManagerHandle == NULL)
+    {
+        DWORD lastError = GetLastError();
 
-		printf("Error: Failure open sc manager. (LastError %d)\r\n", lastError);
-		returnValue = false;
+        printf("Error: Failure open sc manager. (LastError %d)\r\n", lastError);
+        returnValue = false;
 
-		goto RETURN;
-	}
+        goto RETURN;
+    }
 
-	serviceHandle = OpenServiceW(scManagerHandle, driverName, SERVICE_ALL_ACCESS);
+    serviceHandle = OpenServiceW(scManagerHandle, driverName, SERVICE_ALL_ACCESS);
 
-	if (serviceHandle == NULL)
-	{
-		goto RETURN;
-	}
+    if (serviceHandle == NULL)
+    {
+        goto RETURN;
+    }
 
-	SERVICE_STATUS serviceStatus;
+    SERVICE_STATUS serviceStatus;
 
-	if (!QueryServiceStatus(serviceHandle, &serviceStatus))
-	{
-		DWORD lastError = GetLastError();
+    if (!QueryServiceStatus(serviceHandle, &serviceStatus))
+    {
+        DWORD lastError = GetLastError();
 
-		printf("Error: Failure query service. (LastError %d)\r\n", lastError);
-		returnValue = false;
+        printf("Error: Failure query service. (LastError %d)\r\n", lastError);
+        returnValue = false;
 
-		goto RETURN;
-	}
+        goto RETURN;
+    }
 
-	if (serviceStatus.dwCurrentState == SERVICE_RUNNING)
-	{
-		if (ControlService(serviceHandle, SERVICE_CONTROL_STOP, &serviceStatus) != TRUE)
-		{
-			DWORD lastError = GetLastError();
+    if (serviceStatus.dwCurrentState == SERVICE_RUNNING)
+    {
+        if (ControlService(serviceHandle, SERVICE_CONTROL_STOP, &serviceStatus) != TRUE)
+        {
+            DWORD lastError = GetLastError();
 
-			printf("Error: Failure stop service. (LastError %d)\r\n", lastError);
-			returnValue = false;
+            printf("Error: Failure stop service. (LastError %d)\r\n", lastError);
+            returnValue = false;
 
-			goto RETURN;
-		}
-	}
+            goto RETURN;
+        }
+    }
 
-	if (serviceStatus.dwCurrentState != SERVICE_STOPPED)
-	{
-		printf("Error: Failure stop service.\r\n");
-		returnValue = false;
+    if (serviceStatus.dwCurrentState != SERVICE_STOPPED)
+    {
+        printf("Error: Failure stop service.\r\n");
+        returnValue = false;
 
-		goto RETURN;
-	}
+        goto RETURN;
+    }
 
-	if (DeleteService(serviceHandle) != TRUE)
-	{
-		DWORD lastError = GetLastError();
+    if (DeleteService(serviceHandle) != TRUE)
+    {
+        DWORD lastError = GetLastError();
 
-		printf("Error: Failure delete service. (LastError %d)\r\n", lastError);
-		returnValue = false;
+        printf("Error: Failure delete service. (LastError %d)\r\n", lastError);
+        returnValue = false;
 
-		goto RETURN;
-	}
+        goto RETURN;
+    }
 
 
 RETURN:
-	if (scManagerHandle != NULL)
-	{
-		CloseServiceHandle(scManagerHandle);
-	}
+    if (scManagerHandle != NULL)
+    {
+        CloseServiceHandle(scManagerHandle);
+    }
 
-	if (serviceHandle != NULL)
-	{
-		CloseServiceHandle(serviceHandle);
-	}
+    if (serviceHandle != NULL)
+    {
+        CloseServiceHandle(serviceHandle);
+    }
 
-	return returnValue;
+    return returnValue;
 }
 
 
