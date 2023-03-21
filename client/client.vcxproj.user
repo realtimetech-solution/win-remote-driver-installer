@@ -3,21 +3,21 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <LocalDebuggerWorkingDirectory>$(OutDir)</LocalDebuggerWorkingDirectory>
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
-    <LocalDebuggerCommandArguments>127.0.0.1 2828 test test/DummyDriver.sys test/DummyDriver.sys</LocalDebuggerCommandArguments>
+    <LocalDebuggerCommandArguments>127.0.0.1 2828 test files/TARGET.txt files/TARGET.txt</LocalDebuggerCommandArguments>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <LocalDebuggerWorkingDirectory>$(OutDir)</LocalDebuggerWorkingDirectory>
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
-    <LocalDebuggerCommandArguments>127.0.0.1 2828 test test/DummyDriver.sys test/DummyDriver.sys</LocalDebuggerCommandArguments>
+    <LocalDebuggerCommandArguments>127.0.0.1 2828 test files/TARGET.txt files/TARGET.txt</LocalDebuggerCommandArguments>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LocalDebuggerWorkingDirectory>$(OutDir)</LocalDebuggerWorkingDirectory>
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
-    <LocalDebuggerCommandArguments>127.0.0.1 2828 test test/DummyDriver.sys test/DummyDriver.sys</LocalDebuggerCommandArguments>
+    <LocalDebuggerCommandArguments>127.0.0.1 2828 test files/TARGET.txt files/TARGET.txt</LocalDebuggerCommandArguments>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LocalDebuggerWorkingDirectory>$(OutDir)</LocalDebuggerWorkingDirectory>
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
-    <LocalDebuggerCommandArguments>127.0.0.1 2828 test test/DummyDriver.sys test/DummyDriver.sys</LocalDebuggerCommandArguments>
+    <LocalDebuggerCommandArguments>127.0.0.1 2828 test files/TARGET.txt files/TARGET.txt</LocalDebuggerCommandArguments>
   </PropertyGroup>
 </Project>
