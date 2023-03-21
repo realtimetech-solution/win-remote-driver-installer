@@ -361,12 +361,10 @@ int runService(IN_ADDR* hostAddress, int port, wchar_t* workingDirectory)
 		switch (preparePacket.installationMode)
 		{
 		case INSTALLATION_MODE_DEBUG:
-			/*
 			printf("Info: Debug Mode..\r\n");
 			installResponsePacket.responseState = RESPONSE_STATE_SUCCESS;
 
 			break;
-			*/
 		case INSTALLATION_MODE_SYS:
 			if (!startDriverSys(driverName, installFileFullPath))
 			{
