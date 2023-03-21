@@ -2,11 +2,23 @@
 # This .gitignore file was automatically created by Microsoft(R) Visual Studio.
 ################################################################################
 
-/client/x64/Debug
-/server/x64/Debug
+/.vs
 /x64/Debug/*.exe
 /x64/Debug/*.pdb
-/.vs
 /x64/Debug/shared/*
+
+/client/x64/Debug
+/server/x64/Debug
 /client/x64/Release
 /server/x64/Release
+
+/client/x86/Debug
+/server/x86/Debug
+/client/x86/Release
+/server/x86/Release
+
+/x64/Debug
+/x64/Release
+
+/x86/Debug
+/x86/Release
