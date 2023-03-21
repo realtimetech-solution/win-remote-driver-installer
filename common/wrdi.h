@@ -31,34 +31,34 @@ typedef struct PreparePacket_t
 
 typedef struct UploadHeaderPacket_t
 {
-    uint32_t	filePathLength;
+    uint32_t    filePathLength;
     uint32_t	fileSize;
 } UploadHeaderPacket;
 
 typedef struct ResponsePacket_t
 {
-    uint8_t		responseState;
+    uint8_t	    responseState;
 } ResponsePacket;
 
 typedef struct InstallPacket_t
 {
-    uint32_t	installFilePathLength;
+    uint32_t    installFilePathLength;
     // More options?
 } InstallPacket;
 #pragma pack(pop)
 
-#define MAX_DRIVER_NAME_LENGTH	(512)
-#define MAX_FILE_ENTRY_COUNT	(1024)
-#define MAX_FILE_SIZE			(67108864)
+#define MAX_DRIVER_NAME_LENGTH  (512)
+#define MAX_FILE_ENTRY_COUNT    (1024)
+#define MAX_FILE_SIZE           (67108864)
 
-#define RESPONSE_STATE_SUCCESS						(0x00)
-#define RESPONSE_STATE_ERROR						(0x10)
-#define RESPONSE_STATE_ERROR_NETWORK				(0x11)
-#define RESPONSE_STATE_ERROR_DELETE					(0x12)
-#define RESPONSE_STATE_ERROR_INTERNAL				(0x13)
-#define RESPONSE_STATE_ERROR_DRIVER_CLEAN			(0x14)
-#define RESPONSE_STATE_ERROR_DRIVER_START			(0x15)
-#define RESPONSE_STATE_ERROR_NOT_IMPLEMENTED		(0x16)
+#define RESPONSE_STATE_SUCCESS                      (0x00)
+#define RESPONSE_STATE_ERROR                        (0x10)
+#define RESPONSE_STATE_ERROR_NETWORK                (0x11)
+#define RESPONSE_STATE_ERROR_DELETE                 (0x12)
+#define RESPONSE_STATE_ERROR_INTERNAL               (0x13)
+#define RESPONSE_STATE_ERROR_DRIVER_CLEAN           (0x14)
+#define RESPONSE_STATE_ERROR_DRIVER_START           (0x15)
+#define RESPONSE_STATE_ERROR_NOT_IMPLEMENTED        (0x16)
 
 wchar_t* removeLastPathSeparator(wchar_t* string)
 {
