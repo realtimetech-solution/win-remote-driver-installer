@@ -16,8 +16,6 @@
 #include <Ws2tcpip.h>
 #include <shlwapi.h>
 
-#include "sys_driver.h"
-
 #pragma comment (lib, "ws2_32.lib")
 #pragma comment (lib, "shlwapi.lib")
 

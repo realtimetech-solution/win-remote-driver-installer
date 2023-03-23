@@ -1,5 +1,8 @@
 ﻿#include <wrdi.h>
 
+#include <sys_driver.h>
+#include <inf_driver.h>
+
 char fileBuffer[MAX_FILE_SIZE];
 
 int runService(IN_ADDR* hostAddress, int port, wchar_t* workingDirectory)
@@ -117,8 +120,19 @@ int runService(IN_ADDR* hostAddress, int port, wchar_t* workingDirectory)
 
             break;
         case INSTALLATION_MODE_INF:
-            printf("Error: Currently not supported installation mode.\r\n");
-            prepareResponsePacket.responseState = RESPONSE_STATE_ERROR_NOT_IMPLEMENTED;
+            printf("Info: Cleaning already exists inf driver..\r\n");
+
+            if (!cleanDriverInf())
+            {
+                printf("Error: Failure clean inf driver.\r\n");
+                prepareResponsePacket.responseState = RESPONSE_STATE_ERROR_DRIVER_CLEAN;
+
+                break;
+            }
+
+            printf("Info: Cleaned!\r\n");
+
+            prepareResponsePacket.responseState = RESPONSE_STATE_SUCCESS;
 
             break;
         default:
@@ -378,8 +392,15 @@ int runService(IN_ADDR* hostAddress, int port, wchar_t* workingDirectory)
 
             break;
         case INSTALLATION_MODE_INF:
-            printf("Error: Currently not supported installation mode.\r\n");
-            installResponsePacket.responseState = RESPONSE_STATE_ERROR_NOT_IMPLEMENTED;
+            if (!startDriverInf())
+            {
+                printf("Error: Failure start inf driver.\r\n");
+                installResponsePacket.responseState = RESPONSE_STATE_ERROR_DRIVER_START;
+
+                break;
+            }
+
+            installResponsePacket.responseState = RESPONSE_STATE_SUCCESS;
 
             break;
         default:
