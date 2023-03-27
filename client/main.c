@@ -105,7 +105,7 @@ int wmain(int argc, wchar_t** argv)
             wcsncmp(installFileFullPath, uploadTargetFullPath, uploadTargetFullPathLength) != 0 ||
             (installFileFullPath[uploadTargetFullPathLength] != '\\' && installFileFullPath[uploadTargetFullPathLength] != '/'))
         {
-            printf("Error: Install file is not contains in upload target directory.\r\n");
+            printf("Error: Install file is not contained in upload target directory.\r\n");
 
             return 2;
         }
@@ -115,7 +115,7 @@ int wmain(int argc, wchar_t** argv)
         if (uploadTargetFullPathLength != installFileFullPathLength ||
             wcsncmp(installFileFullPath, uploadTargetFullPath, installFileFullPathLength) != 0)
         {
-            printf("Error: Install file is not upload target file.\r\n");
+            printf("Error: Install file and upload target file are not the same.\r\n");
 
             return 2;
         }

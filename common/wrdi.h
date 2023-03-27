@@ -15,6 +15,7 @@
 #include <windows.h>
 #include <Ws2tcpip.h>
 #include <shlwapi.h>
+#include <setupapi.h>
 
 #pragma comment (lib, "ws2_32.lib")
 #pragma comment (lib, "shlwapi.lib")
