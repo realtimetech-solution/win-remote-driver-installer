@@ -54,11 +54,9 @@ bool isPnPDriver(const wchar_t* infPath) {
 	return true;
 }
 
-//Iterate hardware IDs in given Inf Model section
-//and try to update PnP driver
+//Iterate all hardware Ids (in all Models sections)
+//and try UpdateDriverForPlugAandPlayDevices call
 bool iterateUpdatePnPDriver(const wchar_t* infFullPath) {
-	printf("PNP\r\n");		//debug
-
 	UINT errorLine;
 	HINF infHandle = SetupOpenInfFileW(infFullPath, NULL, INF_STYLE_WIN4, &errorLine);
 
@@ -70,38 +68,56 @@ bool iterateUpdatePnPDriver(const wchar_t* infFullPath) {
 	}
 
 	INFCONTEXT infContext;
+	DWORD modelSectionNameSize;
+	wchar_t modelSectionName[LINE_LEN];
+	wchar_t deviceIdName[LINE_LEN];
 
-	//Iterate all compatible HW ids in INF Model sections and try UpdateDriverForPlugAandPlayDevices call
-	//TODO : Currently Inf model section's name should be Standard.NTamd64
-	if (!SetupFindFirstLineW(infHandle, L"Standard.NTamd64", NULL, &infContext)) {
-		printf("Warning: There is no 'Standard.NTamd64' section : %d\r\n", GetLastError());
+	if (!SetupFindFirstLineW(infHandle, L"Manufacturer", NULL, &infContext)) {
+		printf("Error: There is no 'Manufacturer' section : %d\r\n", GetLastError());
 
 		return false;
 	}
 
-	LONG countHID = SetupGetLineCountW(infHandle, L"Standard.NTamd64");
-	printf("HID count : %d\r\n", countHID);		//debug
-
-	wchar_t	HID[LINE_LEN];
-	for (int i = 0; i < countHID; i++) {
-		if (!SetupGetStringFieldW(&infContext, 2, HID, LINE_LEN, NULL)) {
-			printf("Error: Failed to get HID : %d\r\n", GetLastError());
+	while (true) {
+		//get next models section's name
+		//note that below will automatically concatenate models section name and user computer's architecture name
+		if (!SetupDiGetActualModelsSectionW(&infContext, NULL, modelSectionName, LINE_LEN, NULL, NULL)) {
+			printf("Error: SetupDiGetActualModelsSectionW(&infContext, NULL, NULL, 0, 0, NULL) : %d\r\n", GetLastError());
 
 			return false;
 		}
 
-		//debug
-		printf("HID : %S", HID);
-		printf("\r\n");
+		INFCONTEXT infContextForFindDeviceId;
 
-		if (!UpdateDriverForPlugAndPlayDevicesW(NULL, HID, infFullPath, INSTALLFLAG_FORCE, false)) {
-			DWORD error = GetLastError();
-			printf("Failed to install inf. Move to next HID\r\n");
+		// Move to next models section
+		if (!SetupFindFirstLineW(infHandle, modelSectionName, NULL, &infContextForFindDeviceId)) {
+			printf("Warning: There is no '%S' section : %d\r\n", modelSectionName, GetLastError());
 
-			SetupFindNextLine(&infContext, &infContext);
+			return false;
 		}
-		else {
-			return true;	//escape
+
+		while (true) {
+			if (!SetupGetStringFieldW(&infContextForFindDeviceId, 2, deviceIdName, LINE_LEN, NULL)) {
+				break;
+			}
+
+			//printf("%S\r\n", deviceIdName);
+
+			if (!UpdateDriverForPlugAndPlayDevicesW(NULL, deviceIdName, infFullPath, INSTALLFLAG_FORCE, false)) {
+				printf("Info : Failed to install inf. Move to next hardware id\r\n");
+			}
+			else {
+				return true;
+			}
+
+			//move to next line descripting hardware Id
+			if (!SetupFindNextLine(&infContextForFindDeviceId, &infContextForFindDeviceId)) {
+				break;
+			}
+		}
+
+		if (!SetupFindNextLine(&infContext, &infContext)) {
+			break;
 		}
 	}
 
@@ -123,7 +139,6 @@ bool installInfDriver(const wchar_t* infPath) {
 		return false;
 	}
 	
-	//hardwareId = L"PCI\\VEN_10EE&DEV_D000&SUBSYS_000E10EE&REV_00"
 	if (infFlag) {
 		if (!iterateUpdatePnPDriver(infFullPath)) {
 			DWORD error = GetLastError();
