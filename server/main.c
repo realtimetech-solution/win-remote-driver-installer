@@ -11,7 +11,7 @@ int runService(IN_ADDR* hostAddress, int port, wchar_t* workingDirectory)
 
     if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0)
     {
-        printf("Error: Failure WSAStartup.\r\n");
+        printf("Error: Failure at WSAStartup.\r\n");
 
         return 1;
     }
@@ -25,14 +25,14 @@ int runService(IN_ADDR* hostAddress, int port, wchar_t* workingDirectory)
 
     if (bind(serverSocket, (SOCKADDR*)&socketAddress, sizeof(SOCKADDR_IN)) == SOCKET_ERROR)
     {
-        printf("Error: Failure socket bind.\r\n");
+        printf("Error: Failure in socket binding.\r\n");
 
         return 1;
     }
 
     if (listen(serverSocket, SOMAXCONN) == SOCKET_ERROR)
     {
-        printf("Error: Failure socket listen.\r\n");
+        printf("Error: Failure in socket listening.\r\n");
 
         return 1;
     }
@@ -51,7 +51,7 @@ int runService(IN_ADDR* hostAddress, int port, wchar_t* workingDirectory)
 
         if (clientSocket == SOCKET_ERROR)
         {
-            printf("Error: Failure socket accept.\r\n");
+            printf("Error: Failure in socket accepting.\r\n");
 
             return 1;
         }
@@ -67,7 +67,7 @@ int runService(IN_ADDR* hostAddress, int port, wchar_t* workingDirectory)
 
         if (recvBytes(clientSocket, (char*)&preparePacket, sizeof(PreparePacket)) == SOCKET_ERROR)
         {
-            printf("Error: Failure receive prepare packet.\r\n");
+            printf("Error: Failure in receiving prepare packet.\r\n");
             prepareResponsePacket.responseState = RESPONSE_STATE_ERROR_NETWORK;
 
             goto RESPONSE_PREPARE;
@@ -85,7 +85,7 @@ int runService(IN_ADDR* hostAddress, int port, wchar_t* workingDirectory)
 
         if (recvBytes(clientSocket, (char*)&driverName, sizeof(wchar_t) * preparePacket.driverNameLength) == SOCKET_ERROR)
         {
-            printf("Error: Failure receive driver name.\r\n");
+            printf("Error: Failure in receiving driver name.\r\n");
             prepareResponsePacket.responseState = RESPONSE_STATE_ERROR_NETWORK;
 
             goto RESPONSE_PREPARE;
@@ -104,11 +104,11 @@ int runService(IN_ADDR* hostAddress, int port, wchar_t* workingDirectory)
 
             break;
         case INSTALLATION_MODE_SYS:
-            printf("Info: Cleaning already exists sys driver..\r\n");
+            printf("Info: Cleaning existing sys driver..\r\n");
 
             if (!cleanDriverSys(driverName))
             {
-                printf("Error: Failure clean sys driver.\r\n");
+                printf("Error: Failed to clean sys driver.\r\n");
                 prepareResponsePacket.responseState = RESPONSE_STATE_ERROR_DRIVER_CLEAN;
 
                 break;
@@ -120,11 +120,11 @@ int runService(IN_ADDR* hostAddress, int port, wchar_t* workingDirectory)
 
             break;
         case INSTALLATION_MODE_INF:
-            printf("Info: Cleaning already exists inf driver..\r\n");
+            printf("Info: Cleaning existing inf driver..\r\n");
 
             if (!cleanDriverInf())
             {
-                printf("Error: Failure clean inf driver.\r\n");
+                printf("Error: Failed to clean inf driver.\r\n");
                 prepareResponsePacket.responseState = RESPONSE_STATE_ERROR_DRIVER_CLEAN;
 
                 break;
@@ -142,10 +142,10 @@ int runService(IN_ADDR* hostAddress, int port, wchar_t* workingDirectory)
             break;
         }
 
-    RESPONSE_PREPARE:
+RESPONSE_PREPARE:
         if (sendBytes(clientSocket, (char*)&prepareResponsePacket, sizeof(ResponsePacket)) == SOCKET_ERROR)
         {
-            printf("Error: Failure prepare response packet.\r\n");
+            printf("Error: Failure in preparing response packet.\r\n");
         }
 
         if (prepareResponsePacket.responseState != RESPONSE_STATE_SUCCESS)
@@ -165,7 +165,7 @@ int runService(IN_ADDR* hostAddress, int port, wchar_t* workingDirectory)
 
             if (recvBytes(clientSocket, (char*)&uploadHeaderPacket, sizeof(UploadHeaderPacket)) == SOCKET_ERROR)
             {
-                printf("Error: Failure receive upload header packet.\r\n");
+                printf("Error: Failure in receiving upload header packet.\r\n");
                 uploadResponsePacket.responseState = RESPONSE_STATE_ERROR_NETWORK;
 
                 goto RESPONSE_UPLOAD;
@@ -183,7 +183,7 @@ int runService(IN_ADDR* hostAddress, int port, wchar_t* workingDirectory)
 
             if (recvBytes(clientSocket, (char*)&filePath, sizeof(wchar_t) * uploadHeaderPacket.filePathLength) == SOCKET_ERROR)
             {
-                printf("Error: Failure receive file path.\r\n");
+                printf("Error: Failure in receiving file path.\r\n");
                 uploadResponsePacket.responseState = RESPONSE_STATE_ERROR_NETWORK;
 
                 goto RESPONSE_UPLOAD;
@@ -203,7 +203,7 @@ int runService(IN_ADDR* hostAddress, int port, wchar_t* workingDirectory)
 
             if (recvBytes(clientSocket, fileBuffer, uploadHeaderPacket.fileSize) == SOCKET_ERROR)
             {
-                printf("Error: Failure receive file data.\r\n");
+                printf("Error: Failure in receiving file data.\r\n");
                 uploadResponsePacket.responseState = RESPONSE_STATE_ERROR_NETWORK;
 
                 goto RESPONSE_UPLOAD;
@@ -213,7 +213,7 @@ int runService(IN_ADDR* hostAddress, int port, wchar_t* workingDirectory)
 
             if (PathCombineW(fileWithWorkingDirectoryPath, workingDirectory, filePath) == NULL)
             {
-                printf("Error: Failure path combine.\r\n");
+                printf("Error: Failure in path combining.\r\n");
                 uploadResponsePacket.responseState = RESPONSE_STATE_ERROR_INTERNAL;
 
                 goto RESPONSE_UPLOAD;
@@ -224,7 +224,7 @@ int runService(IN_ADDR* hostAddress, int port, wchar_t* workingDirectory)
 
             if (!PathRemoveFileSpecW(directoryPath))
             {
-                printf("Error: Failure remove file name in full path.\r\n");
+                printf("Error: Failure in removing file name in full path.\r\n");
                 uploadResponsePacket.responseState = RESPONSE_STATE_ERROR_INTERNAL;
 
                 goto RESPONSE_UPLOAD;
@@ -232,7 +232,7 @@ int runService(IN_ADDR* hostAddress, int port, wchar_t* workingDirectory)
 
             if (!createDirectories(directoryPath))
             {
-                printf("Error: Failure create sub directories.\r\n");
+                printf("Error: Failure in creating sub directories.\r\n");
                 uploadResponsePacket.responseState = RESPONSE_STATE_ERROR_INTERNAL;
 
                 goto RESPONSE_UPLOAD;
@@ -277,7 +277,7 @@ int runService(IN_ADDR* hostAddress, int port, wchar_t* workingDirectory)
 
             if (fileHandle == INVALID_HANDLE_VALUE)
             {
-                printf("Error: Failure open file write handle.\r\n");
+                printf("Error: Failure in opening file write handle.\r\n");
                 uploadResponsePacket.responseState = RESPONSE_STATE_ERROR_INTERNAL;
 
                 goto RESPONSE_UPLOAD;
@@ -287,7 +287,7 @@ int runService(IN_ADDR* hostAddress, int port, wchar_t* workingDirectory)
 
             if (!WriteFile(fileHandle, fileBuffer, uploadHeaderPacket.fileSize, &writtenBytes, NULL))
             {
-                printf("Error: Failure write file.\r\n");
+                printf("Error: Failure in writing file.\r\n");
                 uploadResponsePacket.responseState = RESPONSE_STATE_ERROR_INTERNAL;
 
                 goto RESPONSE_UPLOAD;
@@ -295,7 +295,7 @@ int runService(IN_ADDR* hostAddress, int port, wchar_t* workingDirectory)
 
             if (writtenBytes != uploadHeaderPacket.fileSize)
             {
-                printf("Error: Failure write all data to file.\r\n");
+                printf("Error: Failure in writing all data to file.\r\n");
                 uploadResponsePacket.responseState = RESPONSE_STATE_ERROR_INTERNAL;
 
                 goto RESPONSE_UPLOAD;
@@ -309,7 +309,7 @@ int runService(IN_ADDR* hostAddress, int port, wchar_t* workingDirectory)
 
             uploadResponsePacket.responseState = RESPONSE_STATE_SUCCESS;
 
-        RESPONSE_UPLOAD:
+RESPONSE_UPLOAD:
             if (sendBytes(clientSocket, (char*)&uploadResponsePacket, sizeof(ResponsePacket)) == SOCKET_ERROR)
             {
                 printf("Error: Failure upload response packet.\r\n");
@@ -392,7 +392,7 @@ int runService(IN_ADDR* hostAddress, int port, wchar_t* workingDirectory)
 
             break;
         case INSTALLATION_MODE_INF:
-            if (!startDriverInf())
+            if (!installInfDriver(installFileFullPath))
             {
                 printf("Error: Failure start inf driver.\r\n");
                 installResponsePacket.responseState = RESPONSE_STATE_ERROR_DRIVER_START;
@@ -410,7 +410,7 @@ int runService(IN_ADDR* hostAddress, int port, wchar_t* workingDirectory)
             break;
         }
 
-    RESPONSE_INSTALL:
+RESPONSE_INSTALL:
         if (sendBytes(clientSocket, (char*)&installResponsePacket, sizeof(ResponsePacket)) == SOCKET_ERROR)
         {
             printf("Error: Failure install response packet.\r\n");

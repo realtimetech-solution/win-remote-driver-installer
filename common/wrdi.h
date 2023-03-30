@@ -15,6 +15,7 @@
 #include <windows.h>
 #include <Ws2tcpip.h>
 #include <shlwapi.h>
+#include <setupapi.h>
 
 #pragma comment (lib, "ws2_32.lib")
 #pragma comment (lib, "shlwapi.lib")
@@ -22,15 +23,15 @@
 #pragma pack(push, 1)
 typedef struct PreparePacket_t
 {
-    uint32_t	driverNameLength;
-    uint32_t	fileCount;
-    uint8_t		installationMode;
+    uint32_t    driverNameLength;
+    uint32_t    fileCount;
+    uint8_t     installationMode;
 } PreparePacket;
 
 typedef struct UploadHeaderPacket_t
 {
     uint32_t    filePathLength;
-    uint32_t	fileSize;
+    uint32_t    fileSize;
 } UploadHeaderPacket;
 
 typedef struct ResponsePacket_t
