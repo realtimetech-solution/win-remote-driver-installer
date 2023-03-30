@@ -54,11 +54,14 @@ bool isPnPDriver(const wchar_t* infPath) {
 	return true;
 }
 
-//Iterate all hardware Ids (in all Models sections)
-//and try UpdateDriverForPlugAandPlayDevices call
+//Iterate all hardware Ids (for all Models sections referred in Manufacturer section)
+//and try UpdateDriverForPlugAndPlayDevices call
+//returns true if UpdateDriverForPlugAndPlayDevices call succeeded at least once
 bool iterateUpdatePnPDriver(const wchar_t* infFullPath) {
 	UINT errorLine;
 	HINF infHandle = SetupOpenInfFileW(infFullPath, NULL, INF_STYLE_WIN4, &errorLine);
+
+	UINT installCount = 0;
 
 	if (infHandle == INVALID_HANDLE_VALUE)
 	{
@@ -67,12 +70,12 @@ bool iterateUpdatePnPDriver(const wchar_t* infFullPath) {
 		return false;
 	}
 
-	INFCONTEXT infContext;
+	INFCONTEXT manufacturerContext;
 	DWORD modelSectionNameSize;
 	wchar_t modelSectionName[LINE_LEN];
 	wchar_t deviceIdName[LINE_LEN];
 
-	if (!SetupFindFirstLineW(infHandle, L"Manufacturer", NULL, &infContext)) {
+	if (!SetupFindFirstLineW(infHandle, L"Manufacturer", NULL, &manufacturerContext)) {		//go to first line of specified section
 		printf("Error: There is no 'Manufacturer' section : %d\r\n", GetLastError());
 
 		return false;
@@ -81,48 +84,74 @@ bool iterateUpdatePnPDriver(const wchar_t* infFullPath) {
 	while (true) {
 		//get next models section's name
 		//note that below will automatically concatenate models section name and user computer's architecture name
-		if (!SetupDiGetActualModelsSectionW(&infContext, NULL, modelSectionName, LINE_LEN, NULL, NULL)) {
-			printf("Error: SetupDiGetActualModelsSectionW(&infContext, NULL, NULL, 0, 0, NULL) : %d\r\n", GetLastError());
-
-			return false;
+		wchar_t manufacturer[LINE_LEN];
+		if (!SetupGetStringFieldW(&manufacturerContext, 0, manufacturer, LINE_LEN, NULL)) {
+			//no more manufacturer exists
+			goto RETURN;
 		}
 
-		INFCONTEXT infContextForFindDeviceId;
+		if (!SetupDiGetActualModelsSectionW(&manufacturerContext, NULL, modelSectionName, LINE_LEN, NULL, NULL)) {
+			printf("Error: Getting models section for manufacturer %S failed.\r\n", manufacturer);
+
+			return 1;
+		}
+
+		INFCONTEXT deviceIdContext;
 
 		// Move to next models section
-		if (!SetupFindFirstLineW(infHandle, modelSectionName, NULL, &infContextForFindDeviceId)) {
+		if (!SetupFindFirstLineW(infHandle, modelSectionName, NULL, &deviceIdContext)) {
+			//if models section mentioned in Inf file is not compatible with caller's architecture, move to next models section referred in manufacturer section
 			printf("Warning: There is no '%S' section : %d\r\n", modelSectionName, GetLastError());
 
-			return false;
-		}
-
-		while (true) {
-			if (!SetupGetStringFieldW(&infContextForFindDeviceId, 2, deviceIdName, LINE_LEN, NULL)) {
-				break;
+			if (!SetupFindNextLine(&manufacturerContext, &manufacturerContext)) {
+				//no more lines in manufacturer section
+				goto RETURN;
 			}
 
-			//printf("%S\r\n", deviceIdName);
+			continue;
+		}
+
+		//iterate all hardware Id in current models section
+		while (true) {
+			if (!SetupGetStringFieldW(&deviceIdContext, 2, deviceIdName, LINE_LEN, NULL)) {
+				//current line is not descripting hardward Id
+				//move on to the next models section
+				if (!SetupFindNextLine(&manufacturerContext, &manufacturerContext)) {
+					goto RETURN;
+				}
+
+				break;
+			}
 
 			if (!UpdateDriverForPlugAndPlayDevicesW(NULL, deviceIdName, infFullPath, INSTALLFLAG_FORCE, false)) {
 				printf("Info : Failed to install inf. Move to next hardware id\r\n");
+
+				//move to next line descripting hardware Id
+				if (!SetupFindNextLine(&deviceIdContext, &deviceIdContext)) {
+					//no more compatible hardware id, move on to next models section
+					if (!SetupFindNextLine(&manufacturerContext, &manufacturerContext)) {
+						goto RETURN;
+					}
+					break;
+				}
 			}
 			else {
-				return true;
-			}
+				//successfuly found target hardware id in current section. Move on to the next section referred in manufacturer section
+				installCount += 1;
 
-			//move to next line descripting hardware Id
-			if (!SetupFindNextLine(&infContextForFindDeviceId, &infContextForFindDeviceId)) {
+				if (!SetupFindNextLine(&manufacturerContext, &manufacturerContext)) {
+					goto RETURN;
+				}
+
 				break;
 			}
 		}
-
-		if (!SetupFindNextLine(&infContext, &infContext)) {
-			break;
-		}
 	}
 
-	return false;	//No valid HID matched
+RETURN:
+	return installCount != 0 ? true : false;
 }
+
 
 bool installInfDriver(const wchar_t* infPath) {
 	bool infFlag = 0;

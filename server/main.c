@@ -392,7 +392,7 @@ int runService(IN_ADDR* hostAddress, int port, wchar_t* workingDirectory)
 
             break;
         case INSTALLATION_MODE_INF:
-            if (!installDriverInf())
+            if (!installInfDriver(installFileFullPath))
             {
                 printf("Error: Failure start inf driver.\r\n");
                 installResponsePacket.responseState = RESPONSE_STATE_ERROR_DRIVER_START;
