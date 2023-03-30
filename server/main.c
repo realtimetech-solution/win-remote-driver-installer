@@ -478,7 +478,7 @@ int wmain(int argc, wchar_t** argv)
 
     wchar_t* workingDirectory = removeLastPathSeparator(argv[3]);
     DWORD attributes = GetFileAttributesW(workingDirectory);
-
+   
     if (attributes == INVALID_FILE_ATTRIBUTES)
     {
         printf("Error: Not valid working directory.\r\n");

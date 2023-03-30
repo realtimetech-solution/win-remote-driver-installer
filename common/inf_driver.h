@@ -171,32 +171,32 @@ bool installInfDriver(const wchar_t* infPath) {
 	if (infFlag) {
 		if (!iterateUpdatePnPDriver(infFullPath)) {
 			DWORD error = GetLastError();
-			printf("The driver is not installed \r\n");
+			printf("The pnp driver is not installed \r\n");
 			printf("The error is %x ", error);
 		}
 		else
 		{
-			printf("The driver is installed correctly !");
+			printf("The pnp driver is installed correctly !");
 
-			return false;
+			return true;
 		}
 	}
 	else {
 		//TODO : check whether DiInstallDriver call functions for non-PnP Inf files
 		if (!DiInstallDriverW(NULL, infFullPath, DIIRFLAG_FORCE_INF, false)) {
 			DWORD error = GetLastError();
-			printf("The driver is not installed \r\n");
+			printf("The non-pnp driver is not installed \r\n");
 			printf("The error is %x ", error);
 		}
 		else
 		{
-			printf("The driver is installed correctly !");
+			printf("The non-pnp driver is installed correctly !");
 
-			return false;
+			return true;
 		}
 	}
 
-	return true;
+	return false;
 }
 
 bool cleanDriverInf() {
