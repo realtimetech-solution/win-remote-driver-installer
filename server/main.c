@@ -142,7 +142,7 @@ int runService(IN_ADDR* hostAddress, int port, wchar_t* workingDirectory)
             break;
         }
 
-RESPONSE_PREPARE:
+    RESPONSE_PREPARE:
         if (sendBytes(clientSocket, (char*)&prepareResponsePacket, sizeof(ResponsePacket)) == SOCKET_ERROR)
         {
             printf("Error: Failure in preparing response packet.\r\n");
@@ -309,7 +309,7 @@ RESPONSE_PREPARE:
 
             uploadResponsePacket.responseState = RESPONSE_STATE_SUCCESS;
 
-RESPONSE_UPLOAD:
+        RESPONSE_UPLOAD:
             if (sendBytes(clientSocket, (char*)&uploadResponsePacket, sizeof(ResponsePacket)) == SOCKET_ERROR)
             {
                 printf("Error: Failure upload response packet.\r\n");
@@ -410,7 +410,7 @@ RESPONSE_UPLOAD:
             break;
         }
 
-RESPONSE_INSTALL:
+    RESPONSE_INSTALL:
         if (sendBytes(clientSocket, (char*)&installResponsePacket, sizeof(ResponsePacket)) == SOCKET_ERROR)
         {
             printf("Error: Failure install response packet.\r\n");

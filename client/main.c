@@ -1,4 +1,5 @@
 ﻿#include <wrdi.h>
+#include "ini_reader.h"
 
 char fileBuffer[MAX_FILE_SIZE];
 
@@ -18,30 +19,59 @@ int wmain(int argc, wchar_t** argv)
         return 2;
     }
 
-    wchar_t* server = argv[1];
-    IN_ADDR serverAddress;
+    //pack client's configuration
+    wchar_t serverAddress[MAX_BUFFER_SIZE];
+    wchar_t port[MAX_BUFFER_SIZE];
+    wchar_t driverName[MAX_BUFFER_SIZE];
+    wchar_t uploadTarget[MAX_BUFFER_SIZE];
+    wchar_t installFile[MAX_BUFFER_SIZE];
+    wchar_t exampleBinary[MAX_BUFFER_SIZE];
 
-    if (InetPtonW(AF_INET, server, &serverAddress) <= 0)
-    {
-        printf("Error: Given host is not valid.\r\n");
+    ClientConfig clientConfig = { serverAddress, port, driverName, uploadTarget, installFile, exampleBinary };
 
-        return 2;
+    wchar_t* iniFile = argv[1];
+    wchar_t iniFileFullPath[MAX_PATH];
+    size_t iniFileFullPathLength = GetFullPathNameW(iniFile, MAX_PATH, iniFileFullPath, NULL);
+
+    if (iniFileFullPathLength < 0 || iniFileFullPathLength >= MAX_PATH) {
+        printf("Error: Failed to get full path of ini file.\r\n");
+
+        return 1;
     }
 
-    wchar_t* portArgument = argv[2];
-    int port = wcstol(portArgument, NULL, 10);
 
-    if (port == 0)
-    {
-        if (wcslen(portArgument) != 1 || portArgument[0] != '0')
-        {
+    if (!clientINIRead(&clientConfig, iniFileFullPath)) {
+        printf("Error: Failed to setup client's configuration.\r\n");
+
+        return 1;
+    }
+
+    //server ip check
+    IN_ADDR serverAddressConverted;
+    if (InetPtonW(AF_INET, serverAddress, &serverAddressConverted) <= 0) {
+        printf("Error: Given server address is not valid.\r\n");
+
+        return false;
+    }
+
+    //port check
+    int portNumber = wcstol(port, NULL, 10);
+
+    if (portNumber == 0) {
+        if (wcslen(port) != 1 || port[0] != '0') {
             printf("Error: Given port number is not integer.\r\n");
 
-            return 2;
+            return false;
         }
     }
 
-    wchar_t* driverName = argv[3];
+    if (portNumber < 0 || portNumber > MAX_PORT_NUMBER) {
+        printf("Error: Invalid port number.\r\n");
+
+        return false;
+    }
+
+    //driver name check
     int driverNameLength = (int)wcslen(driverName);
 
     if (driverNameLength > MAX_DRIVER_NAME_LENGTH)
@@ -51,31 +81,15 @@ int wmain(int argc, wchar_t** argv)
         return 2;
     }
 
-    wchar_t* uploadTarget = removeLastPathSeparator(argv[4]);
+    //upload target check
+    wchar_t* uploadTarget = removeLastPathSeparator(uploadTarget);
     DWORD uploadTargetAttributes = GetFileAttributesW(uploadTarget);
 
     if (uploadTargetAttributes == INVALID_FILE_ATTRIBUTES)
     {
         printf("Error: Not valid upload target directory or file.\r\n");
 
-        return 2;
-    }
-
-    wchar_t* installFile = removeLastPathSeparator(argv[5]);
-    DWORD installFileAttributes = GetFileAttributesW(installFile);
-
-    if (installFileAttributes == INVALID_FILE_ATTRIBUTES)
-    {
-        printf("Error: Not valid install file.\r\n");
-
-        return 2;
-    }
-
-    if (installFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
-    {
-        printf("Error: Given install file is directory.\r\n");
-
-        return 2;
+        return false;
     }
 
     wchar_t uploadTargetFullPath[MAX_PATH];
@@ -85,7 +99,25 @@ int wmain(int argc, wchar_t** argv)
     {
         printf("Error: Failure get full path of upload target path.\r\n");
 
-        return 2;
+        return false;
+    }
+
+    //install file check
+    wchar_t* installFile = removeLastPathSeparator(installFile);
+    DWORD installFileAttributes = GetFileAttributesW(installFile);
+
+    if (installFileAttributes == INVALID_FILE_ATTRIBUTES)
+    {
+        printf("Error: Not valid install file.\r\n");
+
+        return false;
+    }
+
+    if (installFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+    {
+        printf("Error: Given install file is directory.\r\n");
+
+        return false;
     }
 
     wchar_t installFileFullPath[MAX_PATH];
@@ -95,19 +127,18 @@ int wmain(int argc, wchar_t** argv)
     {
         printf("Error: Failure get full path of install file.\r\n");
 
-        return 2;
+        return false;
     }
 
-    // Check install file exists in upload target
     if (uploadTargetAttributes & FILE_ATTRIBUTE_DIRECTORY)
     {
         if (uploadTargetFullPathLength >= installFileFullPathLength ||
             wcsncmp(installFileFullPath, uploadTargetFullPath, uploadTargetFullPathLength) != 0 ||
-            (installFileFullPath[uploadTargetFullPathLength] != '\\' && installFileFullPath[uploadTargetFullPathLength] != '/'))
+            ((installFileFullPath)[uploadTargetFullPathLength] != '\\' && (installFileFullPath)[uploadTargetFullPathLength] != '/'))
         {
             printf("Error: Install file is not contained in upload target directory.\r\n");
 
-            return 2;
+            return false;
         }
     }
     else
@@ -117,8 +148,42 @@ int wmain(int argc, wchar_t** argv)
         {
             printf("Error: Install file and upload target file are not the same.\r\n");
 
-            return 2;
+            return false;
         }
+    }
+
+    //example binary file check
+    wchar_t* exampleBinary = removeLastPathSeparator(exampleBinary);
+    DWORD exampleBinaryAttributes = GetFileAttributesW(exampleBinary);
+
+    if (installFileAttributes == INVALID_FILE_ATTRIBUTES)
+    {
+        printf("Error: Not valid install file.\r\n");
+
+        return false;
+    }
+
+    if (installFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+    {
+        printf("Error: Given install file is directory.\r\n");
+
+        return false;
+    }
+
+    if (GetBinaryTypeW(exampleBinary, NULL)) {
+        printf("Given example binary is not executable.");
+
+        return false;
+    }
+
+    wchar_t exampleBinaryFullPath[MAX_PATH];
+    size_t exampleBinaryFullPathLength = GetFullPathNameW(exampleBinary, MAX_PATH, exampleBinaryFullPath, NULL);
+
+    if (exampleBinaryFullPathLength < 0 || exampleBinaryFullPathLength >= MAX_PATH)
+    {
+        printf("Error: Failure get full path of example binary.\r\n");
+
+        return false;
     }
 
     // Connect to server
@@ -134,9 +199,9 @@ int wmain(int argc, wchar_t** argv)
     SOCKET clientSocket = socket(PF_INET, SOCK_STREAM, 0);
     SOCKADDR_IN socketAddress = { 0 };
 
-    memcpy(&socketAddress.sin_addr, &serverAddress, sizeof(IN_ADDR));
+    memcpy(&socketAddress.sin_addr, &serverAddressConverted, sizeof(IN_ADDR));
     socketAddress.sin_family = AF_INET;
-    socketAddress.sin_port = htons(port);
+    socketAddress.sin_port = htons(portNumber);
 
     if (connect(clientSocket, (SOCKADDR*)&socketAddress, sizeof(SOCKADDR_IN)) == SOCKET_ERROR)
     {

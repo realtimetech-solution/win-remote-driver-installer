@@ -21,6 +21,21 @@
 #pragma comment (lib, "shlwapi.lib")
 
 #pragma pack(push, 1)
+typedef struct ClientConfig_t {
+    wchar_t*        serverAddress;  //ipv4
+    wchar_t*        port;           
+    wchar_t*        driverName;     
+    wchar_t*        uploadTarget;   //relative
+    wchar_t*        installFile;    //relative
+    wchar_t*        exampleBinary;  //relative
+} ClientConfig;
+
+typedef struct ServerConfig_t {
+    IN_ADDR         serverAddress;
+    int             port;
+    wchar_t*        workDirectory;
+} ServerConfig;
+
 typedef struct PreparePacket_t
 {
     uint32_t    driverNameLength;
@@ -49,6 +64,8 @@ typedef struct InstallPacket_t
 #define MAX_DRIVER_NAME_LENGTH  (512)
 #define MAX_FILE_ENTRY_COUNT    (1024)
 #define MAX_FILE_SIZE           (67108864)
+#define MAX_PORT_NUMBER         (65536)
+#define MAX_BUFFER_SIZE         (1024)      //TODO
 
 #define RESPONSE_STATE_SUCCESS                      (0x00)
 #define RESPONSE_STATE_ERROR                        (0x10)

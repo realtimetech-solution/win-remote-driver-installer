@@ -144,7 +144,7 @@ bool updateDriverCompatibleDevices(const wchar_t* infFullPath)
         }
 
 
-NEXT_MANUFACTURER:
+    NEXT_MANUFACTURER:
         // No more compatible hardware id, move on to next models section
         if (!SetupFindNextLine(&manufacturerContext, &manufacturerContext))
         {

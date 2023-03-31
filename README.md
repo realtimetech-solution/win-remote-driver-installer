@@ -1,20 +1,41 @@
 # win-remote-driver-installer
 Deploy and Install and Run driver remotely via TCP/IP on windows.
 
-## wrdi-server
+## wrdi-server command
 ```
-wrdi-server.exe <Host> <Port> <Working Directory>
+wrdi-server.exe <Server configuration INI file>
 
 Example:
-wrdi-server-x64.exe 127.0.0.1 2828 tempDirectory/
+wrdi-server-x64.exe server_config.ini
+```
+
+## wrdi-server config example
+```
+[CONNECTION]
+server_ip = 127.0.0.1
+port = 2828
+
+[FILE]
+working_directory = test
 ```
 
 ## wrdi-client
 ```
-wrdi-client.exe <Server> <Port> <Driver Name> <Upload Directory or File> <Install File>
+wrdi-client.exe <Client configuration INI file>
 
 Example:
-wrdi-client-x64.exe 127.0.0.1 2828 TestDriver Debug/x64/ Debug/x64/testdriver.sys
-wrdi-client-x64.exe 127.0.0.1 2828 TestDriver Debug/x64/ Debug/x64/testdriver.inf
-wrdi-client-x64.exe 127.0.0.1 2828 TestDriver Debug/x64/testdriver.sys Debug/x64/testdriver.sys
+wrdi-client-x64.exe client_config.ini
+```
+
+## wrdi-client config example
+```
+[CONNECTION]
+server_ip = 127.0.0.1
+port = 2828
+
+[FILES]
+driver_name = MyDriver
+upload_target = MyDriver/Release/x64
+install_file = MyDriver/Release/x64/driver.sys
+example_binary = usage_ex.exe	;optional : leave as blank
 ```
