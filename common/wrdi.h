@@ -23,17 +23,17 @@
 #pragma pack(push, 1)
 typedef struct ClientConfig_t {
     wchar_t*        serverAddress;  //ipv4
-    wchar_t*        port;           
-    wchar_t*        driverName;     
+    wchar_t*        port;
+    wchar_t*        driverName;
     wchar_t*        uploadTarget;   //relative
     wchar_t*        installFile;    //relative
     wchar_t*        exampleBinary;  //relative
 } ClientConfig;
 
 typedef struct ServerConfig_t {
-    IN_ADDR         serverAddress;
-    int             port;
-    wchar_t*        workDirectory;
+    wchar_t*        serverAddress;
+    wchar_t*        port;
+    wchar_t*        workingDirectory;
 } ServerConfig;
 
 typedef struct PreparePacket_t
@@ -41,6 +41,7 @@ typedef struct PreparePacket_t
     uint32_t    driverNameLength;
     uint32_t    fileCount;
     uint8_t     installationMode;
+    bool        hasBinary;
 } PreparePacket;
 
 typedef struct UploadHeaderPacket_t
@@ -57,8 +58,14 @@ typedef struct ResponsePacket_t
 typedef struct InstallPacket_t
 {
     uint32_t    installFilePathLength;
-    // More options?
 } InstallPacket;
+
+typedef struct ExecutePacket_t
+{
+    uint32_t    executeFilePathLength;
+    bool        needInstall;
+} ExecutePacket;
+
 #pragma pack(pop)
 
 #define MAX_DRIVER_NAME_LENGTH  (512)

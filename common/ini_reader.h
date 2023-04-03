@@ -31,16 +31,14 @@ boolean clientINIRead(wchar_t* iniFullPath, ClientConfig* clientConfig) {
     }
 
     //install file
-    wchar_t installFile[MAX_BUFFER_SIZE];
-    if (GetPrivateProfileString(L"FILES", L"install_file", NULL, installFile, MAX_BUFFER_SIZE, iniFullPath) <= 0) {
+    if (GetPrivateProfileString(L"FILES", L"install_file", NULL, clientConfig->installFile, MAX_BUFFER_SIZE, iniFullPath) <= 0) {
         printf("Error: Failed to read install file's name in INI.\r\n");
 
         return false;
     }
 
-    //example binary file
-    wchar_t exampleBinary[MAX_BUFFER_SIZE];
-    if (GetPrivateProfileString(L"FILES", L"example_binary", NULL, exampleBinary, MAX_BUFFER_SIZE, iniFullPath) <= 0) {
+    //example binary file; could be empty
+    if (GetPrivateProfileStringW(L"FILES", L"example_binary", NULL, clientConfig->exampleBinary, MAX_BUFFER_SIZE, iniFullPath) < 0) {
         printf("Error: Failed to read example binary file's name in INI.\r\n");
 
         return false;
@@ -48,7 +46,24 @@ boolean clientINIRead(wchar_t* iniFullPath, ClientConfig* clientConfig) {
 }
 
 boolean serverINIRead(wchar_t* iniFullPath, ServerConfig* serverConfig) {
-    printf("Not implemented yet.\r\n");
+    //server ip
+    if (GetPrivateProfileString(L"CONNECTION", L"server_ip", NULL, serverConfig->serverAddress, MAX_BUFFER_SIZE, iniFullPath) <= 0) {
+        printf("Error: Failed to read server address in INI.\r\n");
 
-    return false;
+        return false;
+    }
+
+    //server port
+    if (GetPrivateProfileString(L"CONNECTION", L"port", NULL, serverConfig->port, MAX_BUFFER_SIZE, iniFullPath) <= 0) {
+        printf("Error: Failed to read server port in INI.\r\n");
+
+        return false;
+    }
+
+    //working directory name
+    if (GetPrivateProfileString(L"FILES", L"driver_name", NULL, serverConfig->workingDirectory, MAX_BUFFER_SIZE, iniFullPath) <= 0) {
+        printf("Error: Failed to read working directory's name in INI.\r\n");
+
+        return false;
+    }
 }

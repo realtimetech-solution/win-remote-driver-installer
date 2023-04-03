@@ -170,7 +170,7 @@ bool installInfDriver(const wchar_t* infPath)
 
     if (isPnPDriver(infPath))
     {
-        if (!iterateUpdatePnPDriver(infFullPath))
+        if (!updateDriverCompatibleDevices(infFullPath))
         {
             DWORD error = GetLastError();
             printf("The pnp driver is not installed \r\n");

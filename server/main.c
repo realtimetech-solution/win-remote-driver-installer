@@ -2,6 +2,7 @@
 
 #include <sys_driver.h>
 #include <inf_driver.h>
+#include <ini_reader.h>
 
 char fileBuffer[MAX_FILE_SIZE];
 
@@ -344,7 +345,7 @@ int runService(IN_ADDR* hostAddress, int port, wchar_t* workingDirectory)
         if (recvBytes(clientSocket, (char*)&installFilePath, sizeof(wchar_t) * installPacket.installFilePathLength) == SOCKET_ERROR)
         {
             printf("Error: Failure receive install file path.\r\n");
-            installResponsePacket.responseState = RESPONSE_STATE_ERROR_INTERNAL;
+            installResponsePacket.responseState = RESPONSE_STATE_ERROR_NETWORK;
 
             goto RESPONSE_INSTALL;
         }
@@ -413,14 +414,207 @@ int runService(IN_ADDR* hostAddress, int port, wchar_t* workingDirectory)
     RESPONSE_INSTALL:
         if (sendBytes(clientSocket, (char*)&installResponsePacket, sizeof(ResponsePacket)) == SOCKET_ERROR)
         {
-            printf("Error: Failure install response packet.\r\n");
+            printf("Error: Failed to resend install response packet.\r\n");
         }
 
         if (installResponsePacket.responseState == RESPONSE_STATE_SUCCESS)
         {
             printf("Info: Installed!\r\n");
         }
+        
+        if (preparePacket.hasBinary) {
+            printf("Info: Waiting for execute signal");
 
+            ResponsePacket executeResponsePacket = {
+                .responseState = RESPONSE_STATE_ERROR
+            };
+
+            ExecutePacket executePacket;
+            
+            if (recvBytes(clientSocket, (char*)&executePacket, sizeof(ExecutePacket)) == SOCKET_ERROR) {
+                printf("Error: Failed to receive execute packet.\r\n");
+                executeResponsePacket.responseState = RESPONSE_STATE_ERROR_NETWORK;
+
+                goto RESPONSE_EXECUTE;
+            }
+            
+            //get example binary file name
+            wchar_t executeBinaryPath[MAX_PATH];
+
+            if (recvBytes(clientSocket, (char*)&executeBinaryPath, sizeof(wchar_t) * executePacket.executeFilePathLength) == SOCKET_ERROR) {
+                printf("Error: Failed to receive execute file path.\r\n");
+                executeResponsePacket.responseState = RESPONSE_STATE_ERROR_NETWORK;
+          
+                goto RESPONSE_EXECUTE;
+            }
+
+            executeBinaryPath[executePacket.executeFilePathLength] = '\0';
+
+            wchar_t executeFileWithWorkingDirectoryPath[MAX_PATH];
+
+            if (PathCombineW(executeFileWithWorkingDirectoryPath, workingDirectory, executeBinaryPath) == NULL)
+            {
+                printf("Error: Failed to combine path.\r\n");
+                installResponsePacket.responseState = RESPONSE_STATE_ERROR_INTERNAL;
+
+                goto RESPONSE_EXECUTE;
+            }
+
+            wchar_t executeBinaryFullPath[MAX_PATH];
+            size_t executeBinaryFullPathLength = GetFullPathNameW(executeFileWithWorkingDirectoryPath, MAX_PATH, executeBinaryFullPath, NULL);
+
+            if (executeBinaryFullPathLength < 0 || executeBinaryFullPathLength >= MAX_PATH)
+            {
+                printf("Error: Failure get full path of execute file path.\r\n");
+                installResponsePacket.responseState = RESPONSE_STATE_ERROR_INTERNAL;
+
+                goto RESPONSE_EXECUTE;
+            }
+
+            //get content of execute file, if needed
+            if (executePacket.needInstall) {
+                printf("Info: Wait to receive execute file.\r\n");
+
+                UploadHeaderPacket uploadHeaderPacket;
+
+                if (recvBytes(clientSocket, (char*)&uploadHeaderPacket, sizeof(UploadHeaderPacket)) == SOCKET_ERROR)
+                {
+                    printf("Error: Failure in receiving upload header packet.\r\n");
+                    executeResponsePacket.responseState = RESPONSE_STATE_ERROR_NETWORK;
+
+                    goto RESPONSE_EXECUTE;
+                }
+
+                if (uploadHeaderPacket.filePathLength >= MAX_PATH)
+                {
+                    printf("Error: Received file path length is too big.\r\n");
+                    executeResponsePacket.responseState = RESPONSE_STATE_ERROR_INTERNAL;
+
+                    goto RESPONSE_EXECUTE;
+                }
+
+                wchar_t filePath[MAX_PATH];
+
+                if (recvBytes(clientSocket, (char*)&filePath, sizeof(wchar_t) * uploadHeaderPacket.filePathLength) == SOCKET_ERROR)
+                {
+                    printf("Error: Failure in receiving file path.\r\n");
+                    executeResponsePacket.responseState = RESPONSE_STATE_ERROR_NETWORK;
+
+                    goto RESPONSE_EXECUTE;
+                }
+
+                filePath[uploadHeaderPacket.filePathLength] = '\0';
+
+                if (wcsncmp(filePath, executeBinaryPath, executePacket.executeFilePathLength) != 0 || 
+                    executePacket.executeFilePathLength != uploadHeaderPacket.filePathLength) {
+                    printf("Error: Inappropriate file received as example binary file.\r\n");
+                    executeResponsePacket.responseState = RESPONSE_STATE_ERROR_INTERNAL;
+
+                    goto RESPONSE_EXECUTE;
+                }
+
+                printf("Info: Receiving '%S' file..\r\n", filePath);
+
+                if (uploadHeaderPacket.fileSize == 0 || uploadHeaderPacket.fileSize > MAX_FILE_SIZE)
+                {
+                    printf("Error: Invalid file size.\r\n");
+                    executeResponsePacket.responseState = RESPONSE_STATE_ERROR_INTERNAL;
+
+                    goto RESPONSE_EXECUTE;
+                }
+
+                if (recvBytes(clientSocket, fileBuffer, uploadHeaderPacket.fileSize) == SOCKET_ERROR)
+                {
+                    printf("Error: Failure in receiving file data.\r\n");
+                    executeResponsePacket.responseState = RESPONSE_STATE_ERROR_NETWORK;
+
+                    goto RESPONSE_EXECUTE;
+                }
+                
+                HANDLE fileHandle = CreateFileW(executeFileWithWorkingDirectoryPath,
+                                                GENERIC_WRITE,
+                                                0,
+                                                NULL,
+                                                CREATE_NEW,
+                                                FILE_ATTRIBUTE_NORMAL,
+                                                NULL);
+
+                if (fileHandle == INVALID_HANDLE_VALUE)
+                {
+                    printf("Error: Failure in opening file write handle.\r\n");
+                    executeResponsePacket.responseState = RESPONSE_STATE_ERROR_INTERNAL;
+
+                    goto RESPONSE_EXECUTE;
+                }
+
+                DWORD writtenBytes = 0;
+
+                if (!WriteFile(fileHandle, fileBuffer, uploadHeaderPacket.fileSize, &writtenBytes, NULL))
+                {
+                    printf("Error: Failure in writing file.\r\n");
+                    executeResponsePacket.responseState = RESPONSE_STATE_ERROR_INTERNAL;
+
+                    goto RESPONSE_EXECUTE;
+                }
+
+                if (writtenBytes != uploadHeaderPacket.fileSize)
+                {
+                    printf("Error: Failure in writing all data to file.\r\n");
+                    executeResponsePacket.responseState = RESPONSE_STATE_ERROR_INTERNAL;
+
+                    goto RESPONSE_EXECUTE;
+                }
+
+                if (!CloseHandle(fileHandle))
+                {
+                    printf("Error: Failure close file handle.\r\n");
+                }
+            }
+
+            //execute example file
+            STARTUPINFO si = { 0 };         //why zeromemory calls error?
+            si.cb = sizeof(si);
+            PROCESS_INFORMATION pi = { 0 };
+
+            if (!CreateProcessW(NULL, executeFileWithWorkingDirectoryPath, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi))      //TODO : will this work for non-full path
+            {
+                printf("fail to execute example binary.\r\n");
+                executeResponsePacket.responseState = RESPONSE_STATE_ERROR_INTERNAL;
+
+                goto RESPONSE_EXECUTE;
+            }
+            
+            //example binary will run background
+            if (!CloseHandle(pi.hProcess)) {
+                printf("Failed to close process information handle.\r\n");
+                executeResponsePacket.responseState = RESPONSE_STATE_ERROR_INTERNAL;
+
+                goto RESPONSE_EXECUTE;
+            }
+
+            if (!CloseHandle(pi.hThread)) {
+                printf("Failed to close thread information handle.\r\n");
+                executeResponsePacket.responseState = RESPONSE_STATE_ERROR_INTERNAL;
+
+                goto RESPONSE_EXECUTE;
+            }
+
+            executeResponsePacket.responseState = RESPONSE_STATE_SUCCESS;
+
+        RESPONSE_EXECUTE:
+            if (sendBytes(clientSocket, (char*)&executeResponsePacket, sizeof(ResponsePacket)) == SOCKET_ERROR)
+            {
+                printf("Error: Failed to resend execute response packet.\r\n");
+            }
+
+            if (installResponsePacket.responseState == RESPONSE_STATE_SUCCESS)
+            {
+                printf("Info: Executed given example binary!\r\n");
+            }
+            else {
+                printf("Error: Failed to execute given example binary!\r\n");
+            }
+        }
     }
 
     if (closesocket(serverSocket) == SOCKET_ERROR)
@@ -435,7 +629,6 @@ int runService(IN_ADDR* hostAddress, int port, wchar_t* workingDirectory)
 
     return 0;
 }
-
 
 int wmain(int argc, wchar_t** argv)
 {
@@ -453,22 +646,41 @@ int wmain(int argc, wchar_t** argv)
         return 2;
     }
 
-    wchar_t* host = argv[1];
-    IN_ADDR hostAddress;
+    wchar_t serverAddressRaw[MAX_BUFFER_SIZE] ;
+    wchar_t portRaw[MAX_BUFFER_SIZE];
+    wchar_t workingDirectoryRaw[MAX_BUFFER_SIZE];
 
-    if (InetPtonW(AF_INET, host, &hostAddress) <= 0)
+    ServerConfig serverConfig = { serverAddressRaw, portRaw, workingDirectoryRaw };
+
+    wchar_t* iniFile = argv[1];
+    wchar_t iniFileFullPath[MAX_PATH];
+    size_t iniFileFullPathLength = GetFullPathNameW(iniFile, MAX_PATH, iniFileFullPath, NULL);
+
+    if (iniFileFullPathLength < 0 || iniFileFullPathLength >= MAX_PATH) {
+        printf("Error: Failed to get full path of ini file.\r\n");
+
+        return 1;
+    }
+
+    if (!serverINIRead(iniFileFullPath, &serverConfig)) {
+        printf("Error: Failed to setup server's configuration.\r\n");
+
+        return 1;
+    }
+
+    IN_ADDR hostAddress;
+    if (InetPtonW(AF_INET, serverAddressRaw, &hostAddress) <= 0)
     {
         printf("Error: Given host is not valid.\r\n");
 
         return 2;
     }
 
-    wchar_t* portArgument = argv[2];
-    int port = wcstol(portArgument, NULL, 10);
+    int portNumber = wcstol(portRaw, NULL, 10);
 
-    if (port == 0)
+    if (portNumber == 0)
     {
-        if (wcslen(portArgument) != 1 || portArgument[0] != '0')
+        if (wcslen(portRaw) != 1 || portRaw[0] != '0')
         {
             printf("Error: Given port number is not integer.\r\n");
 
@@ -476,7 +688,14 @@ int wmain(int argc, wchar_t** argv)
         }
     }
 
-    wchar_t* workingDirectory = removeLastPathSeparator(argv[3]);
+    if (portNumber < 0 || portNumber > MAX_PORT_NUMBER) {
+        printf("Error: Invalid port number.\r\n");
+
+        return false;
+
+    }
+
+    wchar_t* workingDirectory = removeLastPathSeparator(workingDirectoryRaw);
     DWORD attributes = GetFileAttributesW(workingDirectory);
 
     if (attributes == INVALID_FILE_ATTRIBUTES)
@@ -493,5 +712,5 @@ int wmain(int argc, wchar_t** argv)
         return 2;
     }
 
-    return runService(&hostAddress, port, workingDirectory);
+    return runService(&hostAddress, portNumber, workingDirectory);
 }
