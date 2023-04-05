@@ -13,11 +13,11 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LocalDebuggerWorkingDirectory>$(OutDir)</LocalDebuggerWorkingDirectory>
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
-    <LocalDebuggerCommandArguments>127.0.0.1 2828 test files/TARGET.txt files/TARGET.txt</LocalDebuggerCommandArguments>
+    <LocalDebuggerCommandArguments>clientconfig.ini</LocalDebuggerCommandArguments>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LocalDebuggerWorkingDirectory>$(OutDir)</LocalDebuggerWorkingDirectory>
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
-    <LocalDebuggerCommandArguments>127.0.0.1 2828 test files/TARGET.txt files/TARGET.txt</LocalDebuggerCommandArguments>
+    <LocalDebuggerCommandArguments>clientconfig.ini</LocalDebuggerCommandArguments>
   </PropertyGroup>
 </Project>

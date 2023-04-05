@@ -12,9 +12,9 @@ int wmain(int argc, wchar_t** argv)
         return 1;
     }
 
-    if (argc != 6)
+    if (argc != 2)
     {
-        printf("Usage: wrdi-client.exe <Server> <Port> <Driver Name> <Upload Directory or File> <Install File>\r\n");
+        printf("Usage: wrdi-client.exe <Client configuration INI file>\r\n");
 
         return 2;
     }
@@ -33,13 +33,15 @@ int wmain(int argc, wchar_t** argv)
     wchar_t iniFileFullPath[MAX_PATH];
     size_t iniFileFullPathLength = GetFullPathNameW(iniFile, MAX_PATH, iniFileFullPath, NULL);
 
-    if (iniFileFullPathLength < 0 || iniFileFullPathLength >= MAX_PATH) {
+    if (iniFileFullPathLength < 0 || iniFileFullPathLength >= MAX_PATH)
+    {
         printf("Error: Failed to get full path of ini file.\r\n");
 
         return 1;
     }
 
-    if (!clientINIRead(iniFileFullPath , &clientConfig)) {
+    if (!clientINIRead(iniFileFullPath, &clientConfig))
+    {
         printf("Error: Failed to setup client's configuration.\r\n");
 
         return 1;
@@ -47,7 +49,8 @@ int wmain(int argc, wchar_t** argv)
 
     //server ip check
     IN_ADDR serverAddressConverted;
-    if (InetPtonW(AF_INET, serverAddressRaw, &serverAddressConverted) <= 0) {
+    if (InetPtonW(AF_INET, serverAddressRaw, &serverAddressConverted) <= 0)
+    {
         printf("Error: Given server address is not valid.\r\n");
 
         return false;
@@ -56,15 +59,18 @@ int wmain(int argc, wchar_t** argv)
     //port check
     int portNumber = wcstol(portRaw, NULL, 10);
 
-    if (portNumber == 0) {
-        if (wcslen(portRaw) != 1 || portRaw[0] != '0') {
+    if (portNumber == 0)
+    {
+        if (wcslen(portRaw) != 1 || portRaw[0] != '0')
+        {
             printf("Error: Given port number is not integer.\r\n");
 
             return false;
         }
     }
 
-    if (portNumber < 0 || portNumber > MAX_PORT_NUMBER) {
+    if (portNumber < 0 || portNumber > MAX_PORT_NUMBER)
+    {
         printf("Error: Invalid port number.\r\n");
 
         return false;
@@ -157,7 +163,8 @@ int wmain(int argc, wchar_t** argv)
 
     wchar_t exampleBinaryFullPath[MAX_PATH];
 
-    if (hasBinary) {
+    if (hasBinary)
+    {
         DWORD exampleBinaryAttributes = GetFileAttributesW(exampleBinary);
 
         if (installFileAttributes == INVALID_FILE_ATTRIBUTES)
@@ -174,17 +181,21 @@ int wmain(int argc, wchar_t** argv)
             return false;
         }
 
-        if (GetBinaryTypeW(exampleBinary, NULL)) {
-            printf("Given example binary is not executable.");
-
-            return false;
-        }
-
         size_t exampleBinaryFullPathLength = GetFullPathNameW(exampleBinary, MAX_PATH, exampleBinaryFullPath, NULL);
 
         if (exampleBinaryFullPathLength < 0 || exampleBinaryFullPathLength >= MAX_PATH)
         {
             printf("Error: Failure get full path of example binary.\r\n");
+
+            return false;
+        }
+
+        DWORD binaryType;
+
+
+        if (GetBinaryTypeW(exampleBinaryFullPath, &binaryType) == 0)
+        {
+            printf("Given example binary is not executable.");
 
             return false;
         }
@@ -506,8 +517,9 @@ int wmain(int argc, wchar_t** argv)
     // 
     //check whether example binary is included in upload target directory : if so, send only example binary file name. Else, send file content too.
 
-    if (hasBinary) {
-        bool sendBinary = true;
+    if (hasBinary)
+    {
+        bool sendBinary = false;
         if (directoryMode)
         {
             if (uploadTargetFullPathLength >= exampleBinaryFullPath ||
@@ -516,7 +528,7 @@ int wmain(int argc, wchar_t** argv)
             {
                 printf("Info: Example Binary file is not contained in upload target directory.\r\n");
 
-                sendBinary = false;
+                sendBinary = true;
             }
         }
 
@@ -524,13 +536,22 @@ int wmain(int argc, wchar_t** argv)
         wchar_t exampleBinaryPath[MAX_PATH];
         int exampleBinaryPathLength;
 
-        wcscpy_s(exampleBinaryPath, MAX_PATH, exampleBinaryFullPath);
-        PathStripPathW(exampleBinaryPath);
+        if (sendBinary) //if example binary is not included in upload target path, only send binary name
+        {
+            wcscpy_s(exampleBinaryPath, MAX_PATH, exampleBinaryFullPath);
+            PathStripPathW(exampleBinaryPath);
+        }
+        else
+        {
+            wcscpy_s(exampleBinaryPath, MAX_PATH, directoryName);
+            wcscat_s(exampleBinaryPath, MAX_PATH, L"\\\0");
+            wcscat_s(exampleBinaryPath, MAX_PATH, exampleBinaryFullPath + uploadTargetFullPathLength + 1);
+        }
 
         exampleBinaryPathLength = (int)wcsnlen_s(exampleBinaryPath, MAX_PATH);
 
         ExecutePacket executePacket = {
-            .executeFilePathLength = exampleBinaryPathLength,       //TODO : Refactor namings
+            .executeFilePathLength = exampleBinaryPathLength,
             .needInstall = sendBinary
         };
 
@@ -549,7 +570,8 @@ int wmain(int argc, wchar_t** argv)
         }
 
         //send content of example binary file, if needed
-        if (sendBinary) {
+        if (sendBinary)
+        {
             printf("Info: Uploading '%S' file..\r\n", exampleBinaryPath);
 
             //TODO :  refactor sending file routine as common function
@@ -653,7 +675,8 @@ int wmain(int argc, wchar_t** argv)
 
             return 1;
         }
-        else {
+        else
+        {
             printf("Info: Example binary will be executed!\r\n");
         }
     }

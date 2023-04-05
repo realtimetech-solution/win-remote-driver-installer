@@ -21,19 +21,21 @@
 #pragma comment (lib, "shlwapi.lib")
 
 #pragma pack(push, 1)
-typedef struct ClientConfig_t {
-    wchar_t*        serverAddress;  //ipv4
-    wchar_t*        port;
-    wchar_t*        driverName;
-    wchar_t*        uploadTarget;   //relative
-    wchar_t*        installFile;    //relative
-    wchar_t*        exampleBinary;  //relative
+typedef struct ClientConfig_t
+{
+    wchar_t* serverAddress;  //ipv4
+    wchar_t* port;
+    wchar_t* driverName;
+    wchar_t* uploadTarget;   //relative
+    wchar_t* installFile;    //relative
+    wchar_t* exampleBinary;  //relative
 } ClientConfig;
 
-typedef struct ServerConfig_t {
-    wchar_t*        serverAddress;
-    wchar_t*        port;
-    wchar_t*        workingDirectory;
+typedef struct ServerConfig_t
+{
+    wchar_t* serverAddress;
+    wchar_t* port;
+    wchar_t* workingDirectory;
 } ServerConfig;
 
 typedef struct PreparePacket_t

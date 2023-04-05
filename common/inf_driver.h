@@ -178,7 +178,7 @@ bool installInfDriver(const wchar_t* infPath)
         }
         else
         {
-            printf("The pnp driver is installed correctly !");
+            printf("The pnp driver is installed correctly!\r\n");
 
             return true;
         }
@@ -194,7 +194,7 @@ bool installInfDriver(const wchar_t* infPath)
         }
         else
         {
-            printf("The non-pnp driver is installed correctly !");
+            printf("The non-pnp driver is installed correctly!\r\n");
 
             return true;
         }

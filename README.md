@@ -33,7 +33,7 @@ wrdi-client-x64.exe client_config.ini
 server_ip = 127.0.0.1
 port = 2828
 
-[FILES]
+[FILE]
 driver_name = MyDriver
 upload_target = MyDriver/Release/x64
 install_file = MyDriver/Release/x64/driver.sys
