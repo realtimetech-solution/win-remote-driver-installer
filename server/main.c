@@ -422,8 +422,8 @@ int runService(IN_ADDR* hostAddress, int port, wchar_t* workingDirectory)
             printf("Info: Installed!\r\n");
         }
 
-        //download and execute example binary
-        if (preparePacket.hasBinary)
+        //download and execute example executable
+        if (preparePacket.hasExecutable)
         {
             printf("Info: Waiting for execute signal.\r\n");
 
@@ -441,10 +441,10 @@ int runService(IN_ADDR* hostAddress, int port, wchar_t* workingDirectory)
                 goto RESPONSE_EXECUTE;
             }
 
-            //get example binary file name
-            wchar_t executeBinaryPath[MAX_PATH];
+            //get example executable file name
+            wchar_t executeExecutablePath[MAX_PATH];
 
-            if (recvBytes(clientSocket, (char*)&executeBinaryPath, sizeof(wchar_t) * executePacket.executeFilePathLength) == SOCKET_ERROR)
+            if (recvBytes(clientSocket, (char*)&executeExecutablePath, sizeof(wchar_t) * executePacket.executableFilePathLength) == SOCKET_ERROR)
             {
                 printf("Error: Failed to receive execute file path.\r\n");
                 executeResponsePacket.responseState = RESPONSE_STATE_ERROR_NETWORK;
@@ -452,11 +452,11 @@ int runService(IN_ADDR* hostAddress, int port, wchar_t* workingDirectory)
                 goto RESPONSE_EXECUTE;
             }
 
-            executeBinaryPath[executePacket.executeFilePathLength] = '\0';
+            executeExecutablePath[executePacket.executableFilePathLength] = '\0';
 
             wchar_t executeFileWithWorkingDirectoryPath[MAX_PATH];
 
-            if (PathCombineW(executeFileWithWorkingDirectoryPath, workingDirectory, executeBinaryPath) == NULL)
+            if (PathCombineW(executeFileWithWorkingDirectoryPath, workingDirectory, executeExecutablePath) == NULL)
             {
                 printf("Error: Failed to combine path.\r\n");
                 installResponsePacket.responseState = RESPONSE_STATE_ERROR_INTERNAL;
@@ -464,10 +464,10 @@ int runService(IN_ADDR* hostAddress, int port, wchar_t* workingDirectory)
                 goto RESPONSE_EXECUTE;
             }
 
-            wchar_t executeBinaryFullPath[MAX_PATH];
-            size_t executeBinaryFullPathLength = GetFullPathNameW(executeFileWithWorkingDirectoryPath, MAX_PATH, executeBinaryFullPath, NULL);
+            wchar_t executeExecutableFullPath[MAX_PATH];
+            size_t executeExecutableFullPathLength = GetFullPathNameW(executeFileWithWorkingDirectoryPath, MAX_PATH, executeExecutableFullPath, NULL);
 
-            if (executeBinaryFullPathLength < 0 || executeBinaryFullPathLength >= MAX_PATH)
+            if (executeExecutableFullPathLength < 0 || executeExecutableFullPathLength >= MAX_PATH)
             {
                 printf("Error: Failure get full path of execute file path.\r\n");
                 installResponsePacket.responseState = RESPONSE_STATE_ERROR_INTERNAL;
@@ -510,10 +510,10 @@ int runService(IN_ADDR* hostAddress, int port, wchar_t* workingDirectory)
 
                 filePath[uploadHeaderPacket.filePathLength] = '\0';
 
-                if (wcsncmp(filePath, executeBinaryPath, executePacket.executeFilePathLength) != 0 ||
-                    executePacket.executeFilePathLength != uploadHeaderPacket.filePathLength)
+                if (wcsncmp(filePath, executeExecutablePath, executePacket.executableFilePathLength) != 0 ||
+                    executePacket.executableFilePathLength != uploadHeaderPacket.filePathLength)
                 {
-                    printf("Error: Inappropriate file received as example binary file.\r\n");
+                    printf("Error: Inappropriate file received as example executable file.\r\n");
                     executeResponsePacket.responseState = RESPONSE_STATE_ERROR_INTERNAL;
 
                     goto RESPONSE_EXECUTE;
@@ -587,7 +587,7 @@ int runService(IN_ADDR* hostAddress, int port, wchar_t* workingDirectory)
 
             if (executeFileWithWorkingDirectoryFullPathLength < 0 || executeFileWithWorkingDirectoryFullPathLength >= MAX_PATH)
             {
-                printf("Error: Failed to get full path of example binary file.\r\n");
+                printf("Error: Failed to get full path of example executable file.\r\n");
                 executeResponsePacket.responseState = RESPONSE_STATE_ERROR_INTERNAL;
 
                 goto RESPONSE_EXECUTE;
@@ -597,7 +597,7 @@ int runService(IN_ADDR* hostAddress, int port, wchar_t* workingDirectory)
 
             if (!CreateProcessW(NULL, executeFileWithWorkingDirectoryPath, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi))
             {
-                printf("Error: Fail to execute example binary.\r\n");
+                printf("Error: Fail to execute example executable.\r\n");
                 executeResponsePacket.responseState = RESPONSE_STATE_ERROR_INTERNAL;
 
                 goto RESPONSE_EXECUTE;
@@ -606,7 +606,7 @@ int runService(IN_ADDR* hostAddress, int port, wchar_t* workingDirectory)
             WaitForSingleObject(pi.hProcess, INFINITE);
             printf("Info: Executed example executable.\r\n");
 
-            //example binary will run background
+            //example executable will run background
             if (!CloseHandle(pi.hProcess))
             {
                 printf("Failed to close process information handle.\r\n");
@@ -633,11 +633,11 @@ int runService(IN_ADDR* hostAddress, int port, wchar_t* workingDirectory)
 
             if (executeResponsePacket.responseState == RESPONSE_STATE_SUCCESS)
             {
-                printf("Info: Executed given example binary!\r\n");
+                printf("Info: Executed given example executable!\r\n");
             }
             else
             {
-                printf("Error: Failed to execute given example binary!\r\n");
+                printf("Error: Failed to execute given example executable!\r\n");
             }
         }
     }

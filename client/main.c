@@ -25,9 +25,9 @@ int wmain(int argc, wchar_t** argv)
     wchar_t driverNameRaw[MAX_BUFFER_SIZE];
     wchar_t uploadTargetRaw[MAX_BUFFER_SIZE];
     wchar_t installFileRaw[MAX_BUFFER_SIZE];
-    wchar_t exampleBinaryRaw[MAX_BUFFER_SIZE];
+    wchar_t exampleExecutableRaw[MAX_BUFFER_SIZE];
 
-    ClientConfig clientConfig = { serverAddressRaw, portRaw, driverNameRaw, uploadTargetRaw, installFileRaw, exampleBinaryRaw };
+    ClientConfig clientConfig = { serverAddressRaw, portRaw, driverNameRaw, uploadTargetRaw, installFileRaw, exampleExecutableRaw };
 
     wchar_t* iniFile = argv[1];
     wchar_t iniFileFullPath[MAX_PATH];
@@ -157,15 +157,15 @@ int wmain(int argc, wchar_t** argv)
         }
     }
 
-    //example binary file check
-    wchar_t* exampleBinary = removeLastPathSeparator(exampleBinaryRaw);
-    bool hasBinary = (int)wcsnlen_s(exampleBinary, MAX_PATH) == 0 ? false : true;
+    //example executable file check
+    wchar_t* exampleExecutable = removeLastPathSeparator(exampleExecutableRaw);
+    bool hasExecutable = (int)wcsnlen_s(exampleExecutable, MAX_PATH) == 0 ? false : true;
 
-    wchar_t exampleBinaryFullPath[MAX_PATH];
+    wchar_t exampleExecutableFullPath[MAX_PATH];
 
-    if (hasBinary)
+    if (hasExecutable)
     {
-        DWORD exampleBinaryAttributes = GetFileAttributesW(exampleBinary);
+        DWORD exampleExecutableAttributes = GetFileAttributesW(exampleExecutable);
 
         if (installFileAttributes == INVALID_FILE_ATTRIBUTES)
         {
@@ -181,21 +181,21 @@ int wmain(int argc, wchar_t** argv)
             return false;
         }
 
-        size_t exampleBinaryFullPathLength = GetFullPathNameW(exampleBinary, MAX_PATH, exampleBinaryFullPath, NULL);
+        size_t exampleExecutableFullPathLength = GetFullPathNameW(exampleExecutable, MAX_PATH, exampleExecutableFullPath, NULL);
 
-        if (exampleBinaryFullPathLength < 0 || exampleBinaryFullPathLength >= MAX_PATH)
+        if (exampleExecutableFullPathLength < 0 || exampleExecutableFullPathLength >= MAX_PATH)
         {
-            printf("Error: Failure get full path of example binary.\r\n");
+            printf("Error: Failure get full path of example executable.\r\n");
 
             return false;
         }
 
-        DWORD binaryType;
+        DWORD executableType;
 
 
-        if (GetBinaryTypeW(exampleBinaryFullPath, &binaryType) == 0)
+        if (GetBinaryTypeW(exampleExecutableFullPath, &executableType) == 0)
         {
-            printf("Given example binary is not executable.");
+            printf("Given example executable is not executable.");
 
             return false;
         }
@@ -292,7 +292,7 @@ int wmain(int argc, wchar_t** argv)
         .driverNameLength = driverNameLength,
         .fileCount = (uint32_t)uploadFileCount,
         .installationMode = installationMode,
-        .hasBinary = hasBinary
+        .hasExecutable = hasExecutable
     };
 
     if (sendBytes(clientSocket, (char*)&preparePacket, sizeof(PreparePacket)) == SOCKET_ERROR)
@@ -512,47 +512,47 @@ int wmain(int argc, wchar_t** argv)
 
     printf("Info: Installed!\r\n");
 
-    //execute provided example binary
-    //note: example binary is optional
+    //execute provided example executable
+    //note: example executable is optional
     // 
-    //check whether example binary is included in upload target directory : if so, send only example binary file name. Else, send file content too.
+    //check whether example executable is included in upload target directory : if so, send only example executable file name. Else, send file content too.
 
-    if (hasBinary)
+    if (hasExecutable)
     {
-        bool sendBinary = false;
+        bool sendExecutable = false;
         if (directoryMode)
         {
-            if (uploadTargetFullPathLength >= exampleBinaryFullPath ||
-                wcsncmp(exampleBinaryFullPath, uploadTargetFullPath, uploadTargetFullPathLength) != 0 ||
-                (exampleBinaryFullPath[uploadTargetFullPathLength] != '\\' && exampleBinaryFullPath[uploadTargetFullPathLength] != '/'))
+            if (uploadTargetFullPathLength >= exampleExecutableFullPath ||
+                wcsncmp(exampleExecutableFullPath, uploadTargetFullPath, uploadTargetFullPathLength) != 0 ||
+                (exampleExecutableFullPath[uploadTargetFullPathLength] != '\\' && exampleExecutableFullPath[uploadTargetFullPathLength] != '/'))
             {
-                printf("Info: Example Binary file is not contained in upload target directory.\r\n");
+                printf("Info: Example Executable file is not contained in upload target directory.\r\n");
 
-                sendBinary = true;
+                sendExecutable = true;
             }
         }
 
-        //send example binary's name
-        wchar_t exampleBinaryPath[MAX_PATH];
-        int exampleBinaryPathLength;
+        //send example executable's name
+        wchar_t exampleExecutablePath[MAX_PATH];
+        int exampleExecutablePathLength;
 
-        if (sendBinary) //if example binary is not included in upload target path, only send binary name
+        if (sendExecutable) //if example executable is not included in upload target path, only send executable name
         {
-            wcscpy_s(exampleBinaryPath, MAX_PATH, exampleBinaryFullPath);
-            PathStripPathW(exampleBinaryPath);
+            wcscpy_s(exampleExecutablePath, MAX_PATH, exampleExecutableFullPath);
+            PathStripPathW(exampleExecutablePath);
         }
         else
         {
-            wcscpy_s(exampleBinaryPath, MAX_PATH, directoryName);
-            wcscat_s(exampleBinaryPath, MAX_PATH, L"\\\0");
-            wcscat_s(exampleBinaryPath, MAX_PATH, exampleBinaryFullPath + uploadTargetFullPathLength + 1);
+            wcscpy_s(exampleExecutablePath, MAX_PATH, directoryName);
+            wcscat_s(exampleExecutablePath, MAX_PATH, L"\\\0");
+            wcscat_s(exampleExecutablePath, MAX_PATH, exampleExecutableFullPath + uploadTargetFullPathLength + 1);
         }
 
-        exampleBinaryPathLength = (int)wcsnlen_s(exampleBinaryPath, MAX_PATH);
+        exampleExecutablePathLength = (int)wcsnlen_s(exampleExecutablePath, MAX_PATH);
 
         ExecutePacket executePacket = {
-            .executeFilePathLength = exampleBinaryPathLength,
-            .needInstall = sendBinary
+            .executableFilePathLength = exampleExecutablePathLength,
+            .needInstall = sendExecutable
         };
 
         if (sendBytes(clientSocket, (char*)&executePacket, sizeof(executePacket)) == SOCKET_ERROR)
@@ -562,21 +562,21 @@ int wmain(int argc, wchar_t** argv)
             return 1;
         }
 
-        if (sendBytes(clientSocket, (char*)&exampleBinaryPath, sizeof(wchar_t) * (int)exampleBinaryPathLength) == SOCKET_ERROR)
+        if (sendBytes(clientSocket, (char*)&exampleExecutablePath, sizeof(wchar_t) * (int)exampleExecutablePathLength) == SOCKET_ERROR)
         {
-            printf("Error: Failure send example binary file path.\r\n");
+            printf("Error: Failure send example executable file path.\r\n");
 
             return 1;
         }
 
-        //send content of example binary file, if needed
-        if (sendBinary)
+        //send content of example executable file, if needed
+        if (sendExecutable)
         {
-            printf("Info: Uploading '%S' file..\r\n", exampleBinaryPath);
+            printf("Info: Uploading '%S' file..\r\n", exampleExecutablePath);
 
             //TODO :  refactor sending file routine as common function
 
-            HANDLE fileHandle = CreateFileW(exampleBinaryFullPath,
+            HANDLE fileHandle = CreateFileW(exampleExecutableFullPath,
                                             GENERIC_READ,
                                             FILE_SHARE_READ,
                                             NULL,
@@ -634,7 +634,7 @@ int wmain(int argc, wchar_t** argv)
             }
 
             UploadHeaderPacket uploadHeaderPacket = {
-                .filePathLength = exampleBinaryPathLength,
+                .filePathLength = exampleExecutablePathLength,
                 .fileSize = fileSize
             };
 
@@ -645,7 +645,7 @@ int wmain(int argc, wchar_t** argv)
                 return 1;
             }
 
-            if (sendBytes(clientSocket, (char*)&exampleBinaryPath, sizeof(wchar_t) * (int)exampleBinaryPathLength) == SOCKET_ERROR)
+            if (sendBytes(clientSocket, (char*)&exampleExecutablePath, sizeof(wchar_t) * (int)exampleExecutablePathLength) == SOCKET_ERROR)
             {
                 printf("Error: Failure send upload file path.\r\n");
 
@@ -671,13 +671,13 @@ int wmain(int argc, wchar_t** argv)
 
         if (executeResponsePacket.responseState != RESPONSE_STATE_SUCCESS)
         {
-            printf("Error: Failure execute example binary becuase %S.\r\n", getResponseStateString(executeResponsePacket.responseState));
+            printf("Error: Failure execute example executable becuase %S.\r\n", getResponseStateString(executeResponsePacket.responseState));
 
             return 1;
         }
         else
         {
-            printf("Info: Example binary will be executed!\r\n");
+            printf("Info: Example executable will be executed!\r\n");
         }
     }
 

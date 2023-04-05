@@ -44,14 +44,20 @@ boolean clientINIRead(wchar_t* iniFullPath, ClientConfig* clientConfig)
     }
 
     //example binary file; could be empty
-    if (GetPrivateProfileStringW(L"FILE", L"example_binary", NULL, clientConfig->exampleBinary, MAX_BUFFER_SIZE, iniFullPath) < 0)
+    int hasExecutable = GetPrivateProfileStringW(L"FILE", L"example_executable", NULL, clientConfig->exampleExecutable, MAX_BUFFER_SIZE, iniFullPath);
+    if (hasExecutable <= 0)
     {
-        printf("Error: Failed to read example binary file's name in INI.\r\n");
-
-        return false;
+        if (hasExecutable == 0)
+        {
+            printf("Info: No example executable file provided.\r\n");
+        } 
+        else
+        {
+            printf("Error: Failed to read example executable file's name in INI.\r\n");
+            return false;
+        }
     }
 
-    printf("example binary  %S \r\n", clientConfig->exampleBinary);
     return true;
 }
 

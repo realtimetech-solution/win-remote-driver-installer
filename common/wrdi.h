@@ -28,7 +28,7 @@ typedef struct ClientConfig_t
     wchar_t* driverName;
     wchar_t* uploadTarget;   //relative
     wchar_t* installFile;    //relative
-    wchar_t* exampleBinary;  //relative
+    wchar_t* exampleExecutable;  //relative
 } ClientConfig;
 
 typedef struct ServerConfig_t
@@ -43,7 +43,7 @@ typedef struct PreparePacket_t
     uint32_t    driverNameLength;
     uint32_t    fileCount;
     uint8_t     installationMode;
-    bool        hasBinary;
+    bool        hasExecutable;
 } PreparePacket;
 
 typedef struct UploadHeaderPacket_t
@@ -64,7 +64,7 @@ typedef struct InstallPacket_t
 
 typedef struct ExecutePacket_t
 {
-    uint32_t    executeFilePathLength;
+    uint32_t    executableFilePathLength;
     bool        needInstall;
 } ExecutePacket;
 
