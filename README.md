@@ -17,7 +17,7 @@ Address             = 127.0.0.1
 Port                = 2828
 
 [Environment]
-WorkingDirectory	= temp/
+WorkingDirectory    = temp/
 ```
 
 ## wrdi-client
