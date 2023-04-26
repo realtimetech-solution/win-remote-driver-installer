@@ -45,5 +45,5 @@ DirectoryPath   = MyDriver/
 FilePath        = MyDriver/Release/x64/driver.sys       ; *.sys, *.ini
 
 [Execution]
-FilePath        = MyDriver/Test/driver_tester_x64.exe   ; *.exe
+FilePath        = MyDriver/Test/driver_tester_x64.exe   ; Optional
 ```
