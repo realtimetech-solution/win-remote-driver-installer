@@ -3,7 +3,7 @@
 
 #include "wrdi.h"
 
-bool startDriverSys(const wchar_t* driverName, const wchar_t* driverFilePath)
+bool StartSysDriver(const wchar_t* driverName, const wchar_t* driverFilePath)
 {
     bool returnValue = true;
 
@@ -35,8 +35,7 @@ bool startDriverSys(const wchar_t* driverName, const wchar_t* driverFilePath)
                                    NULL,
                                    NULL,
                                    NULL,
-                                   NULL
-    );
+                                   NULL);
 
 
     if (serviceHandle == NULL)
@@ -74,7 +73,7 @@ RETURN:
 }
 
 
-bool cleanDriverSys(const wchar_t* driverName)
+bool CleanSysDriver(const wchar_t* driverName)
 {
     bool returnValue = true;
 
@@ -157,6 +156,4 @@ RETURN:
 
     return returnValue;
 }
-
-
 #endif

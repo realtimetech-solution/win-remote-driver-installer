@@ -1,6 +1,10 @@
 ﻿#include <wrdi.h>
+#include "ini_reader.h"
 
 char fileBuffer[MAX_FILE_SIZE];
+
+INIContext  iniContext;
+wchar_t     iniValueBuffer[MAX_INI_STRING_LENGTH];
 
 int wmain(int argc, wchar_t** argv)
 {
@@ -8,117 +12,263 @@ int wmain(int argc, wchar_t** argv)
     {
         printf("Error: Not supported in system that wide character is not 2 bytes.\r\n");
 
-        return 1;
+        return EXIT_FAILURE;
     }
 
-    if (argc != 6)
+    if (argc != 2)
     {
-        printf("Usage: wrdi-client.exe <Server> <Port> <Driver Name> <Upload Directory or File> <Install File>\r\n");
+        printf("Usage: wrdi-client.exe <Configuration INI File>\r\n");
 
-        return 2;
+        return EXIT_FAILURE;
     }
 
-    wchar_t* server = argv[1];
+    if (!ReadINIFormFile(&iniContext, argv[1]))
+    {
+        printf("Error: Failed to read ini.\r\n");
+
+        return EXIT_FAILURE;
+    }
+
     IN_ADDR serverAddress;
+    int serverPortNumber;
 
-    if (InetPtonW(AF_INET, server, &serverAddress) <= 0)
+    wchar_t driverName[MAX_DRIVER_NAME_LENGTH];
+    size_t driverNameLength;
+
+    wchar_t uploadDirectoryPath[MAX_PATH];
+    size_t uploadDirectoryPathLength;
+
+    wchar_t installationFilePath[MAX_PATH];
+    char installationMode = '\0';
+
+    wchar_t executionFilePath[MAX_PATH];
+    bool hasExecutionFilePath = false;
+
+    if (!GetINIFieldValue(&iniContext, L"Server.Address", iniValueBuffer, MAX_INI_STRING_LENGTH))
     {
-        printf("Error: Given host is not valid.\r\n");
+        printf("Error: Failed to get server address from ini.\r\n");
 
-        return 2;
-    }
-
-    wchar_t* portArgument = argv[2];
-    int port = wcstol(portArgument, NULL, 10);
-
-    if (port == 0)
-    {
-        if (wcslen(portArgument) != 1 || portArgument[0] != '0')
-        {
-            printf("Error: Given port number is not integer.\r\n");
-
-            return 2;
-        }
-    }
-
-    wchar_t* driverName = argv[3];
-    int driverNameLength = (int)wcslen(driverName);
-
-    if (driverNameLength > MAX_DRIVER_NAME_LENGTH)
-    {
-        printf("Error: Given driver name is too long.\r\n");
-
-        return 2;
-    }
-
-    wchar_t* uploadTarget = removeLastPathSeparator(argv[4]);
-    DWORD uploadTargetAttributes = GetFileAttributesW(uploadTarget);
-
-    if (uploadTargetAttributes == INVALID_FILE_ATTRIBUTES)
-    {
-        printf("Error: Not valid upload target directory or file.\r\n");
-
-        return 2;
-    }
-
-    wchar_t* installFile = removeLastPathSeparator(argv[5]);
-    DWORD installFileAttributes = GetFileAttributesW(installFile);
-
-    if (installFileAttributes == INVALID_FILE_ATTRIBUTES)
-    {
-        printf("Error: Not valid install file.\r\n");
-
-        return 2;
-    }
-
-    if (installFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
-    {
-        printf("Error: Given install file is directory.\r\n");
-
-        return 2;
-    }
-
-    wchar_t uploadTargetFullPath[MAX_PATH];
-    size_t uploadTargetFullPathLength = GetFullPathNameW(uploadTarget, MAX_PATH, uploadTargetFullPath, NULL);
-
-    if (uploadTargetFullPathLength < 0 || uploadTargetFullPathLength >= MAX_PATH)
-    {
-        printf("Error: Failure get full path of upload target path.\r\n");
-
-        return 2;
-    }
-
-    wchar_t installFileFullPath[MAX_PATH];
-    size_t installFileFullPathLength = GetFullPathNameW(installFile, MAX_PATH, installFileFullPath, NULL);
-
-    if (installFileFullPathLength < 0 || installFileFullPathLength >= MAX_PATH)
-    {
-        printf("Error: Failure get full path of install file.\r\n");
-
-        return 2;
-    }
-
-    // Check install file exists in upload target
-    if (uploadTargetAttributes & FILE_ATTRIBUTE_DIRECTORY)
-    {
-        if (uploadTargetFullPathLength >= installFileFullPathLength ||
-            wcsncmp(installFileFullPath, uploadTargetFullPath, uploadTargetFullPathLength) != 0 ||
-            (installFileFullPath[uploadTargetFullPathLength] != '\\' && installFileFullPath[uploadTargetFullPathLength] != '/'))
-        {
-            printf("Error: Install file is not contained in upload target directory.\r\n");
-
-            return 2;
-        }
+        return EXIT_FAILURE;
     }
     else
     {
-        if (uploadTargetFullPathLength != installFileFullPathLength ||
-            wcsncmp(installFileFullPath, uploadTargetFullPath, installFileFullPathLength) != 0)
+        if (InetPtonW(AF_INET, iniValueBuffer, &serverAddress) <= 0)
         {
-            printf("Error: Install file and upload target file are not the same.\r\n");
+            printf("Error: Given server address is not valid.\r\n");
 
-            return 2;
+            return EXIT_FAILURE;
         }
+    }
+
+
+    if (!GetINIFieldValue(&iniContext, L"Server.Port", iniValueBuffer, MAX_INI_STRING_LENGTH))
+    {
+        printf("Error: Failed to get server port from ini.\r\n");
+
+        return EXIT_FAILURE;
+    }
+    else
+    {
+        serverPortNumber = wcstol(iniValueBuffer, NULL, 10);;
+
+        if (serverPortNumber == 0)
+        {
+            if (wcslen(iniValueBuffer) != 1 || iniValueBuffer[0] != '0')
+            {
+                printf("Error: Given server port number is not integer.\r\n");
+
+                return EXIT_FAILURE;
+            }
+        }
+
+        if (serverPortNumber < 0 || serverPortNumber > MAX_PORT_NUMBER)
+        {
+            printf("Error: Invalid server port number.\r\n");
+
+            return EXIT_FAILURE;
+        }
+    }
+
+
+    if (!GetINIFieldValue(&iniContext, L"Driver.Name", iniValueBuffer, MAX_INI_STRING_LENGTH))
+    {
+        printf("Error: Failed to get driver name from ini.\r\n");
+
+        return EXIT_FAILURE;
+    }
+    else
+    {
+        driverNameLength = wcslen(iniValueBuffer);
+
+        if (driverNameLength >= MAX_DRIVER_NAME_LENGTH)
+        {
+            printf("Error: Given driver name is too long.\r\n");
+
+            return EXIT_FAILURE;
+        }
+
+        wcscpy_s(driverName, MAX_DRIVER_NAME_LENGTH, iniValueBuffer);
+    }
+
+
+    if (!GetINIFieldValue(&iniContext, L"Upload.DirectoryPath", iniValueBuffer, MAX_INI_STRING_LENGTH))
+    {
+        printf("Error: Failed to get upload directory path from ini.\r\n");
+
+        return EXIT_FAILURE;
+    }
+    else
+    {
+        if (!GetResolvedFullPath(iniValueBuffer, uploadDirectoryPath, MAX_PATH))
+        {
+            printf("Error: Not valid upload directory path.\r\n");
+
+            return EXIT_FAILURE;
+        }
+
+        RemoveLastPathSeparator(uploadDirectoryPath);
+
+        DWORD attributes = GetFileAttributesW(uploadDirectoryPath);
+
+        if (attributes == INVALID_FILE_ATTRIBUTES)
+        {
+            printf("Error: Not valid upload directory path.\r\n");
+
+            return EXIT_FAILURE;
+        }
+
+        if (!(attributes & FILE_ATTRIBUTE_DIRECTORY))
+        {
+            printf("Error: Given upload directory path is not directory.\r\n");
+
+            return EXIT_FAILURE;
+        }
+
+        uploadDirectoryPathLength = wcslen(uploadDirectoryPath);
+
+        if (uploadDirectoryPathLength >= MAX_PATH)
+        {
+            printf("Error: Given upload directory path is too long.\r\n");
+
+            return EXIT_FAILURE;
+        }
+    }
+
+
+    if (!GetINIFieldValue(&iniContext, L"Installation.FilePath", iniValueBuffer, MAX_INI_STRING_LENGTH))
+    {
+        printf("Error: Failed to get installation file path from ini.\r\n");
+
+        return EXIT_FAILURE;
+    }
+    else
+    {
+        if (!GetResolvedFullPath(iniValueBuffer, installationFilePath, MAX_PATH))
+        {
+            printf("Error: Not valid installation file path.\r\n");
+
+            return EXIT_FAILURE;
+        }
+
+        RemoveLastPathSeparator(installationFilePath);
+
+        DWORD attributes = GetFileAttributesW(installationFilePath);
+
+        if (attributes == INVALID_FILE_ATTRIBUTES)
+        {
+            printf("Error: Not valid installation file path.\r\n");
+
+            return EXIT_FAILURE;
+        }
+
+        if (attributes & FILE_ATTRIBUTE_DIRECTORY)
+        {
+            printf("Error: Given installation file path is directory.\r\n");
+
+            return EXIT_FAILURE;
+        }
+
+        if (!ContainsFileInPath(installationFilePath, uploadDirectoryPath))
+        {
+            printf("Error: Install file is not contained in upload target path.\r\n");
+
+            return EXIT_FAILURE;
+        }
+
+        wchar_t* installationFileExtension = PathFindExtensionW(installationFilePath);
+
+        if (installationFileExtension == NULL)
+        {
+            printf("Error: Install file doesn't have extension.\r\n");
+
+            return EXIT_FAILURE;
+        }
+
+        if (_wcsicmp(installationFileExtension, L".inf") == 0)
+        {
+            installationMode = INSTALLATION_MODE_INF;
+        }
+        else if (_wcsicmp(installationFileExtension, L".sys") == 0)
+        {
+            installationMode = INSTALLATION_MODE_SYS;
+        }
+        else if (_wcsicmp(installationFileExtension, L".txt") == 0)
+        {
+            installationMode = INSTALLATION_MODE_DEBUG;
+        }
+        else
+        {
+            printf("Error: Unknown install file extension.\r\n");
+
+            return EXIT_FAILURE;
+        }
+    }
+
+
+    if (GetINIFieldValue(&iniContext, L"Execution.FilePath", iniValueBuffer, MAX_INI_STRING_LENGTH))
+    {
+        if (!GetResolvedFullPath(iniValueBuffer, executionFilePath, MAX_PATH))
+        {
+            printf("Error: Not valid execution file path.\r\n");
+
+            return EXIT_FAILURE;
+        }
+
+        RemoveLastPathSeparator(executionFilePath);
+
+        DWORD attributes = GetFileAttributesW(executionFilePath);
+
+        if (attributes == INVALID_FILE_ATTRIBUTES)
+        {
+            printf("Error: Not valid execution file path.\r\n");
+
+            return EXIT_FAILURE;
+        }
+
+        if (attributes & FILE_ATTRIBUTE_DIRECTORY)
+        {
+            printf("Error: Given execution file path is directory.\r\n");
+
+            return EXIT_FAILURE;
+        }
+
+        DWORD executableType;
+
+        if (GetBinaryTypeW(executionFilePath, &executableType) == 0)
+        {
+            printf("Error: Given example executable is not executable.\r\n");
+
+            return EXIT_FAILURE;
+        }
+
+        if (!ContainsFileInPath(executionFilePath, uploadDirectoryPath))
+        {
+            printf("Error: Execution file is not contained in upload target path.\r\n");
+
+            return EXIT_FAILURE;
+        }
+
+        hasExecutionFilePath = true;
     }
 
     // Connect to server
@@ -128,7 +278,7 @@ int wmain(int argc, wchar_t** argv)
     {
         printf("Error: Failure WSAStartup.\r\n");
 
-        return 1;
+        return EXIT_FAILURE;
     }
 
     SOCKET clientSocket = socket(PF_INET, SOCK_STREAM, 0);
@@ -136,112 +286,69 @@ int wmain(int argc, wchar_t** argv)
 
     memcpy(&socketAddress.sin_addr, &serverAddress, sizeof(IN_ADDR));
     socketAddress.sin_family = AF_INET;
-    socketAddress.sin_port = htons(port);
+    socketAddress.sin_port = htons(serverPortNumber);
 
     if (connect(clientSocket, (SOCKADDR*)&socketAddress, sizeof(SOCKADDR_IN)) == SOCKET_ERROR)
     {
         printf("Error: Failure socket connect.\r\n");
 
-        return 1;
+        return EXIT_FAILURE;
     }
 
     printf("Info: Connected!\r\n");
 
-    wchar_t* installFileExtension = PathFindExtensionW(installFileFullPath);
-
-    if (installFileExtension == NULL)
-    {
-        printf("Error: Install file doesn't have extension.\r\n");
-
-        return 1;
-    }
-
-    char installationMode = '\0';
-
-    if (_wcsicmp(installFileExtension, L".inf") == 0)
-    {
-        installationMode = INSTALLATION_MODE_INF;
-    }
-    else if (_wcsicmp(installFileExtension, L".sys") == 0)
-    {
-        installationMode = INSTALLATION_MODE_SYS;
-    }
-    else if (_wcsicmp(installFileExtension, L".txt") == 0)
-    {
-        installationMode = INSTALLATION_MODE_DEBUG;
-    }
-    else
-    {
-        printf("Error: Unknown install file extension.\r\n");
-
-        return 1;
-    }
-
-    printf("Info: Installation mode is %S\r\n", getInstallationModeString(installationMode));
+    printf("Info: Installation mode is %S\r\n", GetInstallationModeString(installationMode));
 
     printf("Info: Prepare upload targets..\r\n");
-
-    bool directoryMode = uploadTargetAttributes & FILE_ATTRIBUTE_DIRECTORY;
-    wchar_t* directoryName = PathFindFileNameW(uploadTargetFullPath);
+    wchar_t* directoryName = PathFindFileNameW(uploadDirectoryPath);
 
     wchar_t* uploadFiles[MAX_FILE_ENTRY_COUNT];
     size_t uploadFileCount = 0;
 
-    if (directoryMode)
+    if (!GetFilesInDirectory(uploadDirectoryPath, uploadFiles, &uploadFileCount))
     {
-        if (!findAllFiles(uploadTargetFullPath, uploadFiles, &uploadFileCount))
-        {
-            printf("Error: Failure find all files in upload target directory.\r\n");
+        printf("Error: Failure find to files in upload target directory.\r\n");
 
-            return 1;
-        }
-    }
-    else
-    {
-        wchar_t copyBuffer[MAX_PATH];
-
-        wcscpy_s(copyBuffer, MAX_PATH, uploadTargetFullPath);
-        uploadFiles[0] = copyBuffer;
-
-        uploadFileCount = 1;
+        return EXIT_FAILURE;
     }
 
     printf("Info: Send prepare packet.\r\n");
 
     PreparePacket preparePacket = {
-        .driverNameLength = driverNameLength,
+        .driverNameLength = (uint32_t)driverNameLength,
         .fileCount = (uint32_t)uploadFileCount,
-        .installationMode = installationMode
+        .installationMode = installationMode,
+        .hasExecutable = hasExecutionFilePath
     };
 
-    if (sendBytes(clientSocket, (char*)&preparePacket, sizeof(PreparePacket)) == SOCKET_ERROR)
+    if (SendBytesToSocket(clientSocket, (char*)&preparePacket, sizeof(PreparePacket)) == SOCKET_ERROR)
     {
         printf("Error: Failure send prepare packet.\r\n");
 
-        return 1;
+        return EXIT_FAILURE;
     }
 
-    if (sendBytes(clientSocket, (char*)driverName, sizeof(wchar_t) * driverNameLength) == SOCKET_ERROR)
+    if (SendBytesToSocket(clientSocket, (char*)driverName, (int)(sizeof(wchar_t) * driverNameLength)) == SOCKET_ERROR)
     {
         printf("Error: Failure send driver name.\r\n");
 
-        return 1;
+        return EXIT_FAILURE;
     }
 
     ResponsePacket prepareResponsePacket;
 
-    if (recvBytes(clientSocket, (char*)&prepareResponsePacket, sizeof(ResponsePacket)) == SOCKET_ERROR)
+    if (ReceiveBytesFromSocket(clientSocket, (char*)&prepareResponsePacket, sizeof(ResponsePacket)) == SOCKET_ERROR)
     {
         printf("Error: Failure receive prepare response packet.\r\n");
 
-        return 1;
+        return EXIT_FAILURE;
     }
 
     if (prepareResponsePacket.responseState != RESPONSE_STATE_SUCCESS)
     {
-        printf("Error: Failure prepare becuase %S.\r\n", getResponseStateString(prepareResponsePacket.responseState));
+        printf("Error: Failure prepare becuase %S.\r\n", GetResponseStateString(prepareResponsePacket.responseState));
 
-        return 1;
+        return EXIT_FAILURE;
     }
 
     printf("Info: Uploading %zu files..\r\n", uploadFileCount);
@@ -253,21 +360,13 @@ int wmain(int argc, wchar_t** argv)
         if (filePath != NULL)
         {
             wchar_t uploadFilePath[MAX_PATH];
-            int uploadFilePathLength;
+            size_t uploadFilePathLength;
 
-            if (directoryMode)
-            {
-                wcscpy_s(uploadFilePath, MAX_PATH, directoryName);
-                wcscat_s(uploadFilePath, MAX_PATH, L"\\\0");
-                wcscat_s(uploadFilePath, MAX_PATH, filePath + uploadTargetFullPathLength + 1);
-            }
-            else
-            {
-                wcscpy_s(uploadFilePath, MAX_PATH, filePath);
-                PathStripPathW(uploadFilePath);
-            }
+            wcscpy_s(uploadFilePath, MAX_PATH, directoryName);
+            wcscat_s(uploadFilePath, MAX_PATH, L"\\\0");
+            wcscat_s(uploadFilePath, MAX_PATH, filePath + uploadDirectoryPathLength + 1);
 
-            uploadFilePathLength = (int)wcsnlen_s(uploadFilePath, MAX_PATH);
+            uploadFilePathLength = wcsnlen_s(uploadFilePath, MAX_PATH);
 
             printf("Info: Uploading '%S' file..\r\n", uploadFilePath);
 
@@ -283,7 +382,7 @@ int wmain(int argc, wchar_t** argv)
             {
                 printf("Error: Failure open file read handle.\r\n");
 
-                return 1;
+                return EXIT_FAILURE;
             }
 
             LARGE_INTEGER fileSizeLarge;
@@ -292,14 +391,14 @@ int wmain(int argc, wchar_t** argv)
             {
                 printf("Error: Failure get file size.\r\n");
 
-                return 1;
+                return EXIT_FAILURE;
             }
 
             if (fileSizeLarge.QuadPart > MAX_FILE_SIZE)
             {
                 printf("Error: File size is too big.\r\n");
 
-                return 1;
+                return EXIT_FAILURE;
             }
 
             int fileSize = (int)fileSizeLarge.QuadPart;
@@ -310,63 +409,63 @@ int wmain(int argc, wchar_t** argv)
             {
                 printf("Error: Failure read file.\r\n");
 
-                return 1;
+                return EXIT_FAILURE;
             }
 
             if (readBytes != fileSize)
             {
                 printf("Error: Failure read all data of file.\r\n");
 
-                return 1;
+                return EXIT_FAILURE;
             }
 
             if (!CloseHandle(fileHandle))
             {
                 printf("Error: Failure close file handle.\r\n");
 
-                return 1;
+                return EXIT_FAILURE;
             }
 
             UploadHeaderPacket uploadHeaderPacket = {
-                .filePathLength = uploadFilePathLength,
+                .filePathLength = (uint32_t)uploadFilePathLength,
                 .fileSize = fileSize
             };
 
-            if (sendBytes(clientSocket, (char*)&uploadHeaderPacket, sizeof(UploadHeaderPacket)) == SOCKET_ERROR)
+            if (SendBytesToSocket(clientSocket, (char*)&uploadHeaderPacket, sizeof(UploadHeaderPacket)) == SOCKET_ERROR)
             {
                 printf("Error: Failure send upload header packet.\r\n");
 
-                return 1;
+                return EXIT_FAILURE;
             }
 
-            if (sendBytes(clientSocket, (char*)&uploadFilePath, sizeof(wchar_t) * (int)uploadFilePathLength) == SOCKET_ERROR)
+            if (SendBytesToSocket(clientSocket, (char*)&uploadFilePath, sizeof(wchar_t) * (int)uploadFilePathLength) == SOCKET_ERROR)
             {
                 printf("Error: Failure send upload file path.\r\n");
 
-                return 1;
+                return EXIT_FAILURE;
             }
 
-            if (sendBytes(clientSocket, (char*)&fileBuffer, fileSize) == SOCKET_ERROR)
+            if (SendBytesToSocket(clientSocket, (char*)&fileBuffer, fileSize) == SOCKET_ERROR)
             {
                 printf("Error: Failure send upload file data.\r\n");
 
-                return 1;
+                return EXIT_FAILURE;
             }
 
             ResponsePacket uploadResponsePacket;
 
-            if (recvBytes(clientSocket, (char*)&uploadResponsePacket, sizeof(ResponsePacket)) == SOCKET_ERROR)
+            if (ReceiveBytesFromSocket(clientSocket, (char*)&uploadResponsePacket, sizeof(ResponsePacket)) == SOCKET_ERROR)
             {
                 printf("Error: Failure receive upload response packet.\r\n");
 
-                return 1;
+                return EXIT_FAILURE;
             }
 
             if (uploadResponsePacket.responseState != RESPONSE_STATE_SUCCESS)
             {
-                printf("Error: Failure file upload becuase %S.\r\n", getResponseStateString(uploadResponsePacket.responseState));
+                printf("Error: Failure file upload becuase %S.\r\n", GetResponseStateString(uploadResponsePacket.responseState));
 
-                return 1;
+                return EXIT_FAILURE;
             }
 
             printf("Info: Uploaded!\r\n");
@@ -377,59 +476,102 @@ int wmain(int argc, wchar_t** argv)
     getch();
 
     wchar_t installFilePath[MAX_PATH];
-    int installFilePathLength;
+    size_t installFilePathLength;
 
-    if (directoryMode)
-    {
-        wcscpy_s(installFilePath, MAX_PATH, directoryName);
-        wcscat_s(installFilePath, MAX_PATH, L"\\\0");
-        wcscat_s(installFilePath, MAX_PATH, installFileFullPath + uploadTargetFullPathLength + 1);
-    }
-    else
-    {
-        wcscpy_s(installFilePath, MAX_PATH, installFileFullPath);
-        PathStripPathW(installFilePath);
-    }
+    wcscpy_s(installFilePath, MAX_PATH, directoryName);
+    wcscat_s(installFilePath, MAX_PATH, L"\\\0");
+    wcscat_s(installFilePath, MAX_PATH, installationFilePath + uploadDirectoryPathLength + 1);
 
-    installFilePathLength = (int)wcsnlen_s(installFilePath, MAX_PATH);
+    installFilePathLength = wcsnlen_s(installFilePath, MAX_PATH);
 
     printf("Info: Installing '%S' file.. (If it's stuck for a long time, check the server side.)\r\n", installFilePath);
 
     InstallPacket installPacket = {
-        .installFilePathLength = installFilePathLength
+        .installFilePathLength = (uint32_t)installFilePathLength
     };
 
-    if (sendBytes(clientSocket, (char*)&installPacket, sizeof(InstallPacket)) == SOCKET_ERROR)
+    if (SendBytesToSocket(clientSocket, (char*)&installPacket, sizeof(InstallPacket)) == SOCKET_ERROR)
     {
         printf("Error: Failure send install packet.\r\n");
 
-        return 1;
+        return EXIT_FAILURE;
     }
 
-    if (sendBytes(clientSocket, (char*)&installFilePath, sizeof(wchar_t) * (int)installFilePathLength) == SOCKET_ERROR)
+    if (SendBytesToSocket(clientSocket, (char*)&installFilePath, sizeof(wchar_t) * (int)installFilePathLength) == SOCKET_ERROR)
     {
         printf("Error: Failure send install file path.\r\n");
 
-        return 1;
+        return EXIT_FAILURE;
     }
 
     ResponsePacket installResponsePacket;
 
-    if (recvBytes(clientSocket, (char*)&installResponsePacket, sizeof(ResponsePacket)) == SOCKET_ERROR)
+    if (ReceiveBytesFromSocket(clientSocket, (char*)&installResponsePacket, sizeof(ResponsePacket)) == SOCKET_ERROR)
     {
         printf("Error: Failure receive install response packet.\r\n");
 
-        return 1;
+        return EXIT_FAILURE;
     }
 
     if (installResponsePacket.responseState != RESPONSE_STATE_SUCCESS)
     {
-        printf("Error: Failure install driver becuase %S.\r\n", getResponseStateString(installResponsePacket.responseState));
+        printf("Error: Failure install driver becuase %S.\r\n", GetResponseStateString(installResponsePacket.responseState));
 
-        return 1;
+        return EXIT_FAILURE;
     }
 
     printf("Info: Installed!\r\n");
+
+    if (hasExecutionFilePath)
+    {
+        printf("Info: Press any key to Execute..\r\n");
+        getch();
+
+        wchar_t executeFilePath[MAX_PATH];
+        size_t executeFilePathLength;
+
+        wcscpy_s(executeFilePath, MAX_PATH, directoryName);
+        wcscat_s(executeFilePath, MAX_PATH, L"\\\0");
+        wcscat_s(executeFilePath, MAX_PATH, executionFilePath + uploadDirectoryPathLength + 1);
+
+        executeFilePathLength = wcsnlen_s(executeFilePath, MAX_PATH);
+
+        ExecutePacket executePacket = {
+            .executeFilePathLength = (uint32_t)executeFilePathLength
+        };
+
+        if (SendBytesToSocket(clientSocket, (char*)&executePacket, sizeof(executePacket)) == SOCKET_ERROR)
+        {
+            printf("Error: Failure send execute packet.\r\n");
+
+            return EXIT_FAILURE;
+        }
+
+        if (SendBytesToSocket(clientSocket, (char*)&executeFilePath, (int)(sizeof(wchar_t) * executeFilePathLength)) == SOCKET_ERROR)
+        {
+            printf("Error: Failure send execute file path.\r\n");
+
+            return EXIT_FAILURE;
+        }
+
+        ResponsePacket executeResponsePacket;
+
+        if (ReceiveBytesFromSocket(clientSocket, (char*)&executeResponsePacket, sizeof(ResponsePacket)) == SOCKET_ERROR)
+        {
+            printf("Error: Failure receive execute response packet.\r\n");
+
+            return EXIT_FAILURE;
+        }
+
+        if (executeResponsePacket.responseState != RESPONSE_STATE_SUCCESS)
+        {
+            printf("Error: Failure execute becuase %S.\r\n", GetResponseStateString(executeResponsePacket.responseState));
+
+            return EXIT_FAILURE;
+        }
+
+        printf("Info: Executed!\r\n");
+    }
 
     if (closesocket(clientSocket) == SOCKET_ERROR)
     {
@@ -441,5 +583,5 @@ int wmain(int argc, wchar_t** argv)
         printf("Error: Failure WSACleanup.\r\n");
     }
 
-    return 0;
+    return EXIT_SUCCESS;
 }

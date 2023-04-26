@@ -10,7 +10,7 @@
 #pragma comment (lib, "newdev.lib")
 #pragma comment (lib, "Setupapi.lib")
 
-bool isPnPDriver(const wchar_t* infPath)
+bool IsPnPDriver(const wchar_t* infPath)
 {
     wchar_t infFullPath[MAX_PATH];
     size_t infFullPathLength = GetFullPathNameW(infPath, MAX_PATH, infFullPath, NULL);
@@ -62,7 +62,7 @@ bool isPnPDriver(const wchar_t* infPath)
     Iterate and update all compatible hardware Ids (for all Models sections referred in Manufacturer section) and try UpdateDriverForPlugAndPlayDevices call
     returns true if UpdateDriverForPlugAndPlayDevices call succeeded at least once
 */
-bool updateDriverCompatibleDevices(const wchar_t* infFullPath)
+bool UpdateDriverCompatibleDevices(const wchar_t* infFullPath)
 {
     UINT errorLine;
     HINF infHandle = SetupOpenInfFileW(infFullPath, NULL, INF_STYLE_WIN4, &errorLine);
@@ -144,7 +144,7 @@ bool updateDriverCompatibleDevices(const wchar_t* infFullPath)
         }
 
 
-NEXT_MANUFACTURER:
+    NEXT_MANUFACTURER:
         // No more compatible hardware id, move on to next models section
         if (!SetupFindNextLine(&manufacturerContext, &manufacturerContext))
         {
@@ -156,7 +156,7 @@ NEXT_MANUFACTURER:
 }
 
 
-bool installInfDriver(const wchar_t* infPath)
+bool InstallInfDriver(const wchar_t* infPath)
 {
     wchar_t infFullPath[MAX_PATH];
     size_t infFullPathLength = GetFullPathNameW(infPath, MAX_PATH, infFullPath, NULL);
@@ -168,9 +168,9 @@ bool installInfDriver(const wchar_t* infPath)
         return false;
     }
 
-    if (isPnPDriver(infPath))
+    if (IsPnPDriver(infPath))
     {
-        if (!iterateUpdatePnPDriver(infFullPath))
+        if (!UpdateDriverCompatibleDevices(infFullPath))
         {
             DWORD error = GetLastError();
             printf("The pnp driver is not installed \r\n");
@@ -178,7 +178,7 @@ bool installInfDriver(const wchar_t* infPath)
         }
         else
         {
-            printf("The pnp driver is installed correctly !");
+            printf("The pnp driver is installed correctly!\r\n");
 
             return true;
         }
@@ -194,7 +194,7 @@ bool installInfDriver(const wchar_t* infPath)
         }
         else
         {
-            printf("The non-pnp driver is installed correctly !");
+            printf("The non-pnp driver is installed correctly!\r\n");
 
             return true;
         }
@@ -203,7 +203,7 @@ bool installInfDriver(const wchar_t* infPath)
     return false;
 }
 
-bool cleanDriverInf()
+bool CleanInfDriver()
 {
     printf("Cleaning Inf driver currently not implemented.\r\n");
 

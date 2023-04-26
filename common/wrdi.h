@@ -21,11 +21,13 @@
 #pragma comment (lib, "shlwapi.lib")
 
 #pragma pack(push, 1)
+
 typedef struct PreparePacket_t
 {
     uint32_t    driverNameLength;
     uint32_t    fileCount;
     uint8_t     installationMode;
+    bool        hasExecutable;
 } PreparePacket;
 
 typedef struct UploadHeaderPacket_t
@@ -42,13 +44,20 @@ typedef struct ResponsePacket_t
 typedef struct InstallPacket_t
 {
     uint32_t    installFilePathLength;
-    // More options?
 } InstallPacket;
+
+typedef struct ExecutePacket_t
+{
+    uint32_t    executeFilePathLength;
+} ExecutePacket;
+
 #pragma pack(pop)
 
 #define MAX_DRIVER_NAME_LENGTH  (512)
 #define MAX_FILE_ENTRY_COUNT    (1024)
 #define MAX_FILE_SIZE           (67108864)
+#define MAX_PORT_NUMBER         (65536)
+#define MAX_BUFFER_SIZE         (1024)
 
 #define RESPONSE_STATE_SUCCESS                      (0x00)
 #define RESPONSE_STATE_ERROR                        (0x10)
@@ -59,7 +68,79 @@ typedef struct InstallPacket_t
 #define RESPONSE_STATE_ERROR_DRIVER_START           (0x15)
 #define RESPONSE_STATE_ERROR_NOT_IMPLEMENTED        (0x16)
 
-wchar_t* removeLastPathSeparator(wchar_t* string)
+bool GetCombinedAndResolvedFullPath(const wchar_t* basePath, const wchar_t* path, wchar_t* fullPath, const size_t maxLength)
+{
+    wchar_t combinedPath[MAX_PATH];
+
+    if (PathCombineW(combinedPath, basePath, path) == NULL)
+    {
+        return false;
+    }
+
+    size_t fullPathLength = GetFullPathNameW(combinedPath, (DWORD)maxLength, fullPath, NULL);
+
+    if (fullPathLength < 0 || fullPathLength >= maxLength)
+    {
+        return false;
+    }
+
+    return true;
+}
+
+bool GetResolvedFullPath(const wchar_t* path, wchar_t* fullPath, const size_t maxLength)
+{
+    size_t fullPathLength = GetFullPathNameW(path, (DWORD)maxLength, fullPath, NULL);
+
+    if (fullPathLength < 0 || fullPathLength >= maxLength)
+    {
+        return false;
+    }
+
+    return true;
+}
+
+bool ContainsFileInPath(const wchar_t* filePath, const wchar_t* path)
+{
+    wchar_t fullPath[MAX_PATH];
+    wchar_t fullFilePath[MAX_PATH];
+
+    if (!GetResolvedFullPath(path, fullPath, MAX_PATH))
+    {
+        return false;
+    }
+
+    if (!GetResolvedFullPath(filePath, fullFilePath, MAX_PATH))
+    {
+        return false;
+    }
+
+    size_t fullPathLength = wcsnlen_s(fullPath, MAX_PATH);
+    size_t fullFilePathLength = wcsnlen_s(fullFilePath, MAX_PATH);
+
+    DWORD attributes = GetFileAttributesW(fullPath);
+
+    if (attributes & FILE_ATTRIBUTE_DIRECTORY)
+    {
+        if (fullPathLength >= fullFilePathLength ||
+            wcsncmp(fullFilePath, fullPath, fullPathLength) != 0 ||
+            (fullFilePath[fullPathLength] != '\\' && fullFilePath[fullPathLength] != '/'))
+        {
+            return false;
+        }
+    }
+    else
+    {
+        if (fullPathLength != fullFilePathLength ||
+            wcsncmp(fullFilePath, fullPath, fullFilePathLength) != 0)
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+wchar_t* RemoveLastPathSeparator(wchar_t* string)
 {
     size_t actualLength = wcslen(string);
     wchar_t lastCharacter = string[actualLength - 1];
@@ -74,7 +155,7 @@ wchar_t* removeLastPathSeparator(wchar_t* string)
     return string;
 }
 
-const wchar_t* getResponseStateString(const uint8_t value)
+const wchar_t* GetResponseStateString(const uint8_t value)
 {
     switch (value)
     {
@@ -107,7 +188,8 @@ const wchar_t* getResponseStateString(const uint8_t value)
 #define INSTALLATION_MODE_DEBUG	(0x00)
 #define INSTALLATION_MODE_SYS	(0x01)
 #define INSTALLATION_MODE_INF	(0x02)
-const wchar_t* getInstallationModeString(const uint8_t value)
+
+const wchar_t* GetInstallationModeString(const uint8_t value)
 {
     switch (value)
     {
@@ -122,7 +204,7 @@ const wchar_t* getInstallationModeString(const uint8_t value)
     return L"INSTALLATION_UNKNOWN";
 }
 
-bool findAllFiles(const wchar_t* directory, const wchar_t** files, size_t* count)
+bool GetFilesInDirectory(const wchar_t* directory, const wchar_t** files, size_t* count)
 {
     wchar_t pattern[MAX_PATH];
 
@@ -156,7 +238,7 @@ bool findAllFiles(const wchar_t* directory, const wchar_t** files, size_t* count
 
                 size_t returnedCount = 0;
 
-                findAllFiles(subDirectory, files + *count, &returnedCount);
+                GetFilesInDirectory(subDirectory, files + *count, &returnedCount);
 
                 *count += returnedCount;
             }
@@ -196,7 +278,7 @@ bool findAllFiles(const wchar_t* directory, const wchar_t** files, size_t* count
     return true;
 }
 
-bool createDirectories(wchar_t* path)
+bool CreateDirectories(wchar_t* path)
 {
     wchar_t buffer[MAX_PATH];
     buffer[0] = '\0';
@@ -230,7 +312,7 @@ bool createDirectories(wchar_t* path)
     return true;
 }
 
-int removeDirectory(const wchar_t* path)
+int RemoveDirectoryForce(const wchar_t* path)
 {
     SHFILEOPSTRUCT operation = {
         NULL,
@@ -248,7 +330,7 @@ int removeDirectory(const wchar_t* path)
     return SHFileOperation(&operation);
 }
 
-int recvBytes(SOCKET socket, char* buffer, int length)
+int ReceiveBytesFromSocket(SOCKET socket, char* buffer, int length)
 {
     int offset = 0;
 
@@ -267,7 +349,7 @@ int recvBytes(SOCKET socket, char* buffer, int length)
     return length;
 }
 
-int sendBytes(SOCKET socket, const char* data, int length)
+int SendBytesToSocket(SOCKET socket, const char* data, int length)
 {
     int offset = 0;
 
