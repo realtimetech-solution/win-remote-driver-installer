@@ -1,91 +1,155 @@
 #include "wrdi.h"
-#include <WinBase.h>
+#include <Windows.h>
 
-boolean clientINIRead(wchar_t* iniFullPath, ClientConfig* clientConfig)
+#define MAX_INI_STRING_LENGTH   256
+#define MAX_INI_FIELD_COUNT     32
+
+typedef struct INIContext_t
 {
-    //server ip
-    if (GetPrivateProfileString(L"CONNECTION", L"server_ip", NULL, clientConfig->serverAddress, MAX_BUFFER_SIZE, iniFullPath) <= 0)
+    int         items;
+    wchar_t     fieldKeys[MAX_INI_FIELD_COUNT][MAX_INI_STRING_LENGTH];
+    wchar_t     fieldValues[MAX_INI_FIELD_COUNT][MAX_INI_STRING_LENGTH];
+} INIContext;
+
+bool ReadINIFormFile(INIContext* iniContext, const wchar_t* filePath)
+{
+    iniContext->items = 0;
+
+    wchar_t fullPath[MAX_PATH];
+
+    if (!GetResolvedFullPath(filePath, fullPath, MAX_PATH))
     {
-        printf("Error: Failed to read server address in INI.\r\n");
+        printf("Error: Ini file is not exists.\r\n");
 
         return false;
     }
 
-    //server port
-    if (GetPrivateProfileString(L"CONNECTION", L"port", NULL, clientConfig->port, MAX_BUFFER_SIZE, iniFullPath) <= 0)
+    wchar_t sectionNamesBuffer[MAX_INI_STRING_LENGTH];
+    DWORD sectionNamesLength = GetPrivateProfileSectionNamesW(sectionNamesBuffer, MAX_INI_STRING_LENGTH, fullPath);
+    int startSectionNameIndex = 0;
+
+    if (sectionNamesLength < 0)
     {
-        printf("Error: Failed to read server port in INI.\r\n");
+        printf("Error: Failed to read ini sections.\r\n");
 
         return false;
     }
 
-    //driver name
-    if (GetPrivateProfileString(L"FILE", L"driver_name", NULL, clientConfig->driverName, MAX_BUFFER_SIZE, iniFullPath) <= 0)
+    if (sectionNamesLength - 2 >= MAX_INI_STRING_LENGTH)
     {
-        printf("Error: Failed to read driver name in INI.\r\n");
+        printf("Error: Ini section is too long.\r\n");
 
         return false;
     }
 
-    //upload target (file or directory)
-    if (GetPrivateProfileString(L"FILE", L"upload_target", NULL, clientConfig->uploadTarget, MAX_BUFFER_SIZE, iniFullPath) <= 0)
+    for (DWORD sectionNameIndex = 0; sectionNameIndex <= sectionNamesLength; sectionNameIndex++)
     {
-        printf("Error: Failed to read upload target's name in INI.\r\n");
-
-        return false;
-    }
-
-    //install file
-    if (GetPrivateProfileString(L"FILE", L"install_file", NULL, clientConfig->installFile, MAX_BUFFER_SIZE, iniFullPath) <= 0)
-    {
-        printf("Error: Failed to read install file's name in INI.\r\n");
-
-        return false;
-    }
-
-    //example binary file; could be empty
-    int hasExecutable = GetPrivateProfileStringW(L"FILE", L"example_executable", NULL, clientConfig->exampleExecutable, MAX_BUFFER_SIZE, iniFullPath);
-    if (hasExecutable <= 0)
-    {
-        if (hasExecutable == 0)
+        if (sectionNamesBuffer[sectionNameIndex] == '\0')
         {
-            printf("Info: No example executable file provided.\r\n");
-        } 
-        else
-        {
-            printf("Error: Failed to read example executable file's name in INI.\r\n");
-            return false;
+            if (sectionNameIndex >= sectionNamesLength)
+            {
+                break;
+            }
+
+            wchar_t* sectionName = sectionNamesBuffer + startSectionNameIndex;
+            int sectionNameLength = sectionNameIndex - startSectionNameIndex;
+
+            wchar_t keyNamesBuffer[MAX_INI_STRING_LENGTH];
+            DWORD keyNamesLength = GetPrivateProfileString(sectionName, NULL, L"", keyNamesBuffer, MAX_INI_STRING_LENGTH, fullPath);
+            int startKeyNameIndex = 0;
+
+            if (keyNamesLength < 0)
+            {
+                printf("Error: Failed to read ini key name.\r\n");
+
+                return false;
+            }
+
+            if (keyNamesLength - 2 >= MAX_INI_STRING_LENGTH)
+            {
+                printf("Error: Ini key name is too long.\r\n");
+
+                return false;
+            }
+
+
+            for (DWORD keyNameIndex = 0; keyNameIndex <= keyNamesLength; keyNameIndex++)
+            {
+                if (keyNamesBuffer[keyNameIndex] == '\0')
+                {
+                    if (keyNameIndex >= keyNamesLength)
+                    {
+                        break;
+                    }
+
+                    wchar_t* keyName = keyNamesBuffer + startKeyNameIndex;
+                    int keyNameLength = keyNameIndex - startKeyNameIndex;
+
+                    DWORD fieldValueLength = GetPrivateProfileString(sectionName, keyName, L"", iniContext->fieldValues[iniContext->items], MAX_INI_STRING_LENGTH, fullPath);
+
+                    wcscpy_s(iniContext->fieldKeys[iniContext->items], MAX_INI_STRING_LENGTH, sectionName);
+                    wcscat_s(iniContext->fieldKeys[iniContext->items], MAX_INI_STRING_LENGTH, L".");
+                    wcscat_s(iniContext->fieldKeys[iniContext->items], MAX_INI_STRING_LENGTH, keyName);
+
+                    if (fieldValueLength == 0)
+                    {
+                        startKeyNameIndex = keyNameIndex + 1;
+                    }
+                    else
+                    {
+                        if (fieldValueLength - 1 >= MAX_INI_STRING_LENGTH)
+                        {
+                            printf("Error: Ini value is too long.\r\n");
+
+                            return false;
+                        }
+
+                        iniContext->items++;
+
+                        startKeyNameIndex = keyNameIndex + 1;
+                    }
+                }
+            }
+
+            startSectionNameIndex = sectionNameIndex + 1;
         }
     }
+
 
     return true;
 }
 
-boolean serverINIRead(wchar_t* iniFullPath, ServerConfig* serverConfig)
+bool ContainsINIField(const INIContext* iniContext, const wchar_t* fieldKey)
 {
-    //server ip
-    if (GetPrivateProfileString(L"CONNECTION", L"server_ip", NULL, serverConfig->serverAddress, MAX_BUFFER_SIZE, iniFullPath) <= 0)
+    for (int index = 0; index < iniContext->items; index++)
     {
-        printf("Error: Failed to read server address in INI.\r\n");
-
-        return false;
+        if (wcscmp(iniContext->fieldKeys[index], fieldKey) == 0)
+        {
+            return true;
+        }
     }
 
-    //server port
-    if (GetPrivateProfileString(L"CONNECTION", L"port", NULL, serverConfig->port, MAX_BUFFER_SIZE, iniFullPath) <= 0)
-    {
-        printf("Error: Failed to read server port in INI.\r\n");
+    return false;
+}
 
-        return false;
+bool GetINIFieldValue(const INIContext* iniContext, const wchar_t* fieldKey, wchar_t* value, const size_t valueLength)
+{
+    for (int index = 0; index < iniContext->items; index++)
+    {
+        if (wcscmp(iniContext->fieldKeys[index], fieldKey) == 0)
+        {
+            size_t fieldValueLength = wcsnlen_s(iniContext->fieldValues[index], MAX_INI_STRING_LENGTH);
+
+            if (valueLength <= fieldValueLength)
+            {
+                return false;
+            }
+
+            wcscpy_s(value, valueLength, iniContext->fieldValues[index]);
+
+            return true;                  
+        }
     }
 
-    //working directory name
-    if (GetPrivateProfileString(L"FILE", L"working_directory", NULL, serverConfig->workingDirectory, MAX_BUFFER_SIZE, iniFullPath) <= 0)
-    {
-        printf("Error: Failed to read working directory's name in INI.\r\n");
-
-        return false;
-    }
-
-    return true;
+    return false;
 }
