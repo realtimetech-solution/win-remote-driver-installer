@@ -32,18 +32,18 @@ wrdi-client-x64.exe client_config.ini
 ### Configuration Example
 ```
 [Server]
-Address		    = 192.168.0.11
-Port			= 2828
+Address         = 192.168.0.11
+Port            = 2828
 
 [Driver]
-Name			= MyDriver
+Name            = MyDriver
 
 [Upload]
-DirectoryPath	= MyDriver/
+DirectoryPath   = MyDriver/
 
 [Installation]
-FilePath		= MyDriver/Release/x64/driver.sys       ; *.sys, *.ini
+FilePath        = MyDriver/Release/x64/driver.sys       ; *.sys, *.ini
 
 [Execution]
-FilePath		= MyDriver/Test/driver_tester_x64.exe   ; *.exe
+FilePath        = MyDriver/Test/driver_tester_x64.exe   ; *.exe
 ```
