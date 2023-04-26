@@ -77,7 +77,7 @@ bool GetCombinedAndResolvedFullPath(const wchar_t* basePath, const wchar_t* path
         return false;
     }
 
-    size_t fullPathLength = GetFullPathNameW(combinedPath, (DWORD) maxLength, fullPath, NULL);
+    size_t fullPathLength = GetFullPathNameW(combinedPath, (DWORD)maxLength, fullPath, NULL);
 
     if (fullPathLength < 0 || fullPathLength >= maxLength)
     {
@@ -89,7 +89,7 @@ bool GetCombinedAndResolvedFullPath(const wchar_t* basePath, const wchar_t* path
 
 bool GetResolvedFullPath(const wchar_t* path, wchar_t* fullPath, const size_t maxLength)
 {
-    size_t fullPathLength = GetFullPathNameW(path, (DWORD) maxLength, fullPath, NULL);
+    size_t fullPathLength = GetFullPathNameW(path, (DWORD)maxLength, fullPath, NULL);
 
     if (fullPathLength < 0 || fullPathLength >= maxLength)
     {

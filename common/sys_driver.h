@@ -35,8 +35,7 @@ bool StartSysDriver(const wchar_t* driverName, const wchar_t* driverFilePath)
                                    NULL,
                                    NULL,
                                    NULL,
-                                   NULL
-    );
+                                   NULL);
 
 
     if (serviceHandle == NULL)
@@ -157,6 +156,4 @@ RETURN:
 
     return returnValue;
 }
-
-
 #endif

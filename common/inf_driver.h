@@ -10,7 +10,6 @@
 #pragma comment (lib, "newdev.lib")
 #pragma comment (lib, "Setupapi.lib")
 
-
 bool IsPnPDriver(const wchar_t* infPath)
 {
     wchar_t infFullPath[MAX_PATH];

@@ -147,7 +147,7 @@ bool GetINIFieldValue(const INIContext* iniContext, const wchar_t* fieldKey, wch
 
             wcscpy_s(value, valueLength, iniContext->fieldValues[index]);
 
-            return true;                  
+            return true;
         }
     }
 
